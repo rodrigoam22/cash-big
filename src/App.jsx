@@ -18,8 +18,16 @@ const prevDateStr = (iso) => {
   return d.toISOString().slice(0, 10);
 };
 
+const cashbackDe = (aposta) =>
+  aposta.cashback_previsto != null
+    ? Number(aposta.cashback_previsto)
+    : (aposta.valor_aposta ? Number(aposta.valor_aposta) * 0.1 : 0);
+
+const totalCashback = (apostasDoDia) =>
+  (apostasDoDia || []).reduce((acc, a) => acc + cashbackDe(a), 0);
+
 // ================= LOGIN =================
-function Login({ onLoggedIn }) {
+function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -32,7 +40,6 @@ function Login({ onLoggedIn }) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) setError("E-mail ou senha incorretos.");
-    else onLoggedIn();
   };
 
   return (
@@ -60,7 +67,7 @@ function Login({ onLoggedIn }) {
 
 // ================= APP =================
 export default function App() {
-  const [session, setSession] = useState(undefined); // undefined = checking, null = logged out
+  const [session, setSession] = useState(undefined);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -71,7 +78,7 @@ export default function App() {
   if (session === undefined) {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#71717a" }} className="mono">carregando…</div>;
   }
-  if (!session) return <Login onLoggedIn={() => {}} />;
+  if (!session) return <Login />;
   return <Dashboard />;
 }
 
@@ -79,7 +86,8 @@ export default function App() {
 function Dashboard() {
   const [accounts, setAccounts] = useState([]);
   const [activeId, setActiveId] = useState(null);
-  const [entriesByAccount, setEntriesByAccount] = useState({});
+  const [regByAccount, setRegByAccount] = useState({});      // {accountId: {date: {id, saldo, imagem_url}}}
+  const [apostasByAccount, setApostasByAccount] = useState({}); // {accountId: {date: [aposta,...]}}
   const [loading, setLoading] = useState(true);
   const [newAccountName, setNewAccountName] = useState("");
   const [addingAccount, setAddingAccount] = useState(false);
@@ -93,26 +101,37 @@ function Dashboard() {
     setAccounts(accs || []);
     if (accs && accs.length) {
       setActiveId((prev) => prev || accs[0].id);
-      const { data: regs } = await supabase.from("registros").select("*").in("conta_id", accs.map((a) => a.id));
-      const grouped = {};
-      for (const acc of accs) grouped[acc.id] = {};
-      for (const r of regs || []) {
-        grouped[r.conta_id][r.data] = r;
+      const ids = accs.map((a) => a.id);
+
+      const { data: regs } = await supabase.from("registros").select("*").in("conta_id", ids);
+      const regGrouped = {};
+      for (const acc of accs) regGrouped[acc.id] = {};
+      for (const r of regs || []) regGrouped[r.conta_id][r.data] = r;
+      setRegByAccount(regGrouped);
+
+      const { data: apostas } = await supabase.from("apostas").select("*").in("conta_id", ids).order("criado_em", { ascending: true });
+      const apGrouped = {};
+      for (const acc of accs) apGrouped[acc.id] = {};
+      for (const a of apostas || []) {
+        if (!apGrouped[a.conta_id][a.data]) apGrouped[a.conta_id][a.data] = [];
+        apGrouped[a.conta_id][a.data].push(a);
       }
-      setEntriesByAccount(grouped);
+      setApostasByAccount(apGrouped);
     }
     setLoading(false);
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // ---------- accounts ----------
   const addAccount = async () => {
     const nome = newAccountName.trim();
     if (!nome) return;
     const { data, error } = await supabase.from("contas").insert({ nome }).select().single();
     if (!error && data) {
       setAccounts((prev) => [...prev, data]);
-      setEntriesByAccount((prev) => ({ ...prev, [data.id]: {} }));
+      setRegByAccount((prev) => ({ ...prev, [data.id]: {} }));
+      setApostasByAccount((prev) => ({ ...prev, [data.id]: {} }));
       setActiveId(data.id);
     }
     setNewAccountName("");
@@ -123,90 +142,110 @@ function Dashboard() {
     await supabase.from("contas").delete().eq("id", id);
     const next = accounts.filter((a) => a.id !== id);
     setAccounts(next);
-    setEntriesByAccount((prev) => { const c = { ...prev }; delete c[id]; return c; });
+    setRegByAccount((prev) => { const c = { ...prev }; delete c[id]; return c; });
+    setApostasByAccount((prev) => { const c = { ...prev }; delete c[id]; return c; });
     if (activeId === id) setActiveId(next[0]?.id ?? null);
     setConfirmDeleteAcc(null);
   };
 
-  const upsertEntry = async (accountId, date, patch) => {
+  // ---------- saldo / imagem (registros) ----------
+  const upsertRegistro = async (accountId, date, patch) => {
     setSaveState("saving");
-    const current = entriesByAccount[accountId]?.[date] || {};
-    const merged = { ...current, ...patch, conta_id: accountId, data: date };
-    // optimistic update
-    setEntriesByAccount((prev) => ({
-      ...prev,
-      [accountId]: { ...(prev[accountId] || {}), [date]: merged },
-    }));
+    const current = regByAccount[accountId]?.[date] || {};
+    const merged = { ...current, ...patch };
+    setRegByAccount((prev) => ({ ...prev, [accountId]: { ...(prev[accountId] || {}), [date]: merged } }));
     const payload = {
       conta_id: accountId,
       data: date,
-      teve_aposta: merged.teve_aposta ?? null,
-      valor_aposta: merged.valor_aposta === "" ? null : merged.valor_aposta,
-      time: merged.time || null,
-      odd: merged.odd === "" ? null : merged.odd,
-      cashback_previsto: merged.cashback_previsto === "" ? null : merged.cashback_previsto,
-      saldo: merged.saldo === "" ? null : merged.saldo,
+      saldo: merged.saldo === "" || merged.saldo == null ? null : merged.saldo,
+      imagem_url: merged.imagem_url || null,
       atualizado_em: new Date().toISOString(),
     };
-    const { data, error } = await supabase
-      .from("registros")
-      .upsert(payload, { onConflict: "conta_id,data" })
-      .select()
-      .single();
+    const { data, error } = await supabase.from("registros").upsert(payload, { onConflict: "conta_id,data" }).select().single();
     if (!error && data) {
-      setEntriesByAccount((prev) => ({
-        ...prev,
-        [accountId]: { ...(prev[accountId] || {}), [date]: data },
-      }));
+      setRegByAccount((prev) => ({ ...prev, [accountId]: { ...(prev[accountId] || {}), [date]: data } }));
       setSaveState("saved");
-    } else {
-      setSaveState("error");
-    }
+    } else setSaveState("error");
     setTimeout(() => setSaveState("idle"), 1200);
   };
 
-  const deleteEntry = async (accountId, date) => {
-    const entry = entriesByAccount[accountId]?.[date];
-    if (entry?.id) await supabase.from("registros").delete().eq("id", entry.id);
-    setEntriesByAccount((prev) => {
+  const uploadImage = async (accountId, date, file) => {
+    const path = `${accountId}/${date}-${Date.now()}-${file.name}`;
+    const { error: upErr } = await supabase.storage.from("prints").upload(path, file);
+    if (upErr) { alert("Erro ao enviar imagem: " + upErr.message); return; }
+    const { data } = supabase.storage.from("prints").getPublicUrl(path);
+    await upsertRegistro(accountId, date, { imagem_url: data.publicUrl });
+  };
+
+  // ---------- apostas (múltiplas por dia) ----------
+  const addAposta = async (accountId, date) => {
+    setSaveState("saving");
+    const { data, error } = await supabase
+      .from("apostas")
+      .insert({ conta_id: accountId, data: date, valor_aposta: null, time: "", odd: null, cashback_previsto: null })
+      .select()
+      .single();
+    if (!error && data) {
+      setApostasByAccount((prev) => {
+        const acc = { ...(prev[accountId] || {}) };
+        acc[date] = [...(acc[date] || []), data];
+        return { ...prev, [accountId]: acc };
+      });
+      setSaveState("saved");
+    } else setSaveState("error");
+    setTimeout(() => setSaveState("idle"), 1000);
+  };
+
+  const updateAposta = async (accountId, date, apostaId, patch) => {
+    setSaveState("saving");
+    setApostasByAccount((prev) => {
       const acc = { ...(prev[accountId] || {}) };
-      delete acc[date];
+      acc[date] = (acc[date] || []).map((a) => (a.id === apostaId ? { ...a, ...patch } : a));
+      return { ...prev, [accountId]: acc };
+    });
+    const { error } = await supabase.from("apostas").update(patch).eq("id", apostaId);
+    setSaveState(error ? "error" : "saved");
+    setTimeout(() => setSaveState("idle"), 1000);
+  };
+
+  const deleteAposta = async (accountId, date, apostaId) => {
+    await supabase.from("apostas").delete().eq("id", apostaId);
+    setApostasByAccount((prev) => {
+      const acc = { ...(prev[accountId] || {}) };
+      acc[date] = (acc[date] || []).filter((a) => a.id !== apostaId);
       return { ...prev, [accountId]: acc };
     });
   };
 
+  const deleteDay = async (accountId, date) => {
+    const reg = regByAccount[accountId]?.[date];
+    if (reg?.id) await supabase.from("registros").delete().eq("id", reg.id);
+    const apostaIds = (apostasByAccount[accountId]?.[date] || []).map((a) => a.id);
+    if (apostaIds.length) await supabase.from("apostas").delete().in("id", apostaIds);
+    setRegByAccount((prev) => { const acc = { ...(prev[accountId] || {}) }; delete acc[date]; return { ...prev, [accountId]: acc }; });
+    setApostasByAccount((prev) => { const acc = { ...(prev[accountId] || {}) }; delete acc[date]; return { ...prev, [accountId]: acc }; });
+  };
+
   const activeAccount = accounts.find((a) => a.id === activeId);
-  const activeEntries = entriesByAccount[activeId] || {};
+  const activeReg = regByAccount[activeId] || {};
+  const activeApostas = apostasByAccount[activeId] || {};
 
   const sortedDates = useMemo(() => {
-    const dates = new Set(Object.keys(activeEntries));
+    const dates = new Set([...Object.keys(activeReg), ...Object.keys(activeApostas)]);
     dates.add(openDate);
     return Array.from(dates).sort((a, b) => (a < b ? 1 : -1));
-  }, [activeEntries, openDate]);
-
-  const getExpectedCashback = (entry) => {
-    if (!entry) return null;
-    if (entry.teve_aposta !== true) return 0;
-    if (entry.cashback_previsto != null) return Number(entry.cashback_previsto);
-    if (entry.valor_aposta) return Number(entry.valor_aposta) * 0.1;
-    return null;
-  };
+  }, [activeReg, activeApostas, openDate]);
 
   const StatusPill = ({ status }) => {
     const map = {
-      match: { label: "Bateu", cls: "match", icon: Check },
-      mismatch: { label: "Não bateu", cls: "mismatch", icon: X },
-      pending: { label: "Sem dados", cls: "pending", icon: AlertTriangle },
+      match: { label: "Bateu", icon: Check, bg: "rgba(16,185,129,.15)", fg: "#34d399", border: "rgba(16,185,129,.3)" },
+      mismatch: { label: "Não bateu", icon: X, bg: "rgba(244,63,94,.15)", fg: "#fb7185", border: "rgba(244,63,94,.3)" },
+      pending: { label: "Sem dados", icon: AlertTriangle, bg: "rgba(113,113,122,.1)", fg: "#71717a", border: "rgba(113,113,122,.2)" },
     };
     const s = map[status];
     const Icon = s.icon;
-    const colors = {
-      match: { bg: "rgba(16,185,129,.15)", fg: "#34d399", border: "rgba(16,185,129,.3)" },
-      mismatch: { bg: "rgba(244,63,94,.15)", fg: "#fb7185", border: "rgba(244,63,94,.3)" },
-      pending: { bg: "rgba(113,113,122,.1)", fg: "#71717a", border: "rgba(113,113,122,.2)" },
-    }[s.cls];
     return (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 999, border: `1px solid ${colors.border}`, background: colors.bg, color: colors.fg, fontSize: 11, fontWeight: 500 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 999, border: `1px solid ${s.border}`, background: s.bg, color: s.fg, fontSize: 11, fontWeight: 500 }}>
         <Icon size={11} strokeWidth={2.5} /> {s.label}
       </span>
     );
@@ -289,7 +328,7 @@ function Dashboard() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#a1a1aa", fontSize: 12 }} className="mono">
                 <TrendingUp size={13} />
-                {sortedDates.filter((d) => activeEntries[d]?.teve_aposta != null || activeEntries[d]?.saldo != null).length} registros
+                {sortedDates.filter((d) => activeReg[d]?.saldo != null || (activeApostas[d] || []).length > 0).length} registros
               </div>
               {confirmDeleteAcc === activeAccount.id ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
@@ -310,27 +349,37 @@ function Dashboard() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {sortedDates.map((date) => {
-                const entry = activeEntries[date] || {};
-                const prevEntry = activeEntries[prevDateStr(date)];
-                const expectedFromYesterday = getExpectedCashback(prevEntry);
-                const hasBalanceToday = entry.saldo != null;
-                const hasBalanceYesterday = prevEntry?.saldo != null;
-                const delta = hasBalanceToday && hasBalanceYesterday ? Number(entry.saldo) - Number(prevEntry.saldo) : null;
+                const reg = activeReg[date] || {};
+                const apostasDoDia = activeApostas[date] || [];
+                const apostasOntem = activeApostas[prevDateStr(date)] || [];
+                const regOntem = activeReg[prevDateStr(date)];
+
+                const expectedFromYesterday = apostasOntem.length > 0 || regOntem ? totalCashback(apostasOntem) : null;
+                const hasBalanceToday = reg.saldo != null;
+                const hasBalanceYesterday = regOntem?.saldo != null;
+                const delta = hasBalanceToday && hasBalanceYesterday ? Number(reg.saldo) - Number(regOntem.saldo) : null;
+
                 let status = "pending";
                 if (expectedFromYesterday != null && delta != null) {
                   status = Math.abs(delta - expectedFromYesterday) <= 0.5 ? "match" : "mismatch";
                 }
+
                 return (
                   <EntryCard
                     key={date}
                     date={date}
-                    entry={entry}
+                    reg={reg}
+                    apostas={apostasDoDia}
                     expectedFromYesterday={expectedFromYesterday}
                     delta={delta}
                     status={status}
                     isToday={date === openDate}
-                    onChange={(patch) => upsertEntry(activeAccount.id, date, patch)}
-                    onDelete={() => deleteEntry(activeAccount.id, date)}
+                    onChangeReg={(patch) => upsertRegistro(activeAccount.id, date, patch)}
+                    onDeleteDay={() => deleteDay(activeAccount.id, date)}
+                    onUploadImage={(file) => uploadImage(activeAccount.id, date, file)}
+                    onAddAposta={() => addAposta(activeAccount.id, date)}
+                    onChangeAposta={(apostaId, patch) => updateAposta(activeAccount.id, date, apostaId, patch)}
+                    onDeleteAposta={(apostaId) => deleteAposta(activeAccount.id, date, apostaId)}
                     StatusPill={StatusPill}
                   />
                 );
@@ -343,11 +392,24 @@ function Dashboard() {
   );
 }
 
-function EntryCard({ date, entry, expectedFromYesterday, delta, status, isToday, onChange, onDelete, StatusPill }) {
+function EntryCard({
+  date, reg, apostas, expectedFromYesterday, delta, status, isToday,
+  onChangeReg, onDeleteDay, onUploadImage, onAddAposta, onChangeAposta, onDeleteAposta, StatusPill,
+}) {
   const [expanded, setExpanded] = useState(isToday);
-  const expectedToday = entry.teve_aposta === true
-    ? (entry.cashback_previsto != null ? Number(entry.cashback_previsto) : (entry.valor_aposta ? Number(entry.valor_aposta) * 0.1 : 0))
-    : 0;
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
+
+  const expectedToday = totalCashback(apostas);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    await onUploadImage(file);
+    setUploading(false);
+    e.target.value = "";
+  };
 
   return (
     <div style={{ borderRadius: 10, border: `1px solid ${isToday ? "rgba(251,191,36,.3)" : "#27292e"}`, background: isToday ? "rgba(251,191,36,.03)" : "rgba(24,24,27,.4)", overflow: "hidden" }}>
@@ -358,8 +420,10 @@ function EntryCard({ date, entry, expectedFromYesterday, delta, status, isToday,
           {isToday && <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#fbbf24", fontWeight: 600 }}>hoje</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {entry.teve_aposta === true && (
-            <span className="mono" style={{ fontSize: 12, color: "#71717a" }}>aposta {fmtMoney(entry.valor_aposta || 0)}</span>
+          {apostas.length > 0 && (
+            <span className="mono" style={{ fontSize: 12, color: "#71717a" }}>
+              {apostas.length} {apostas.length === 1 ? "aposta" : "apostas"}
+            </span>
           )}
           <StatusPill status={status} />
         </div>
@@ -367,46 +431,57 @@ function EntryCard({ date, entry, expectedFromYesterday, delta, status, isToday,
 
       {expanded && (
         <div style={{ padding: "4px 16px 16px", borderTop: "1px solid rgba(39,41,46,.6)" }}>
+          {/* Apostas do dia */}
           <div style={{ margin: "12px 0" }}>
-            <label style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 6 }}>
-              Teve aposta nesse dia?
-            </label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => onChange({ teve_aposta: true })}
-                style={{ padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: `1px solid ${entry.teve_aposta === true ? "#fbbf24" : "#3f3f46"}`, background: entry.teve_aposta === true ? "#fbbf24" : "transparent", color: entry.teve_aposta === true ? "#0b0d10" : "#71717a" }}
-              >Sim</button>
-              <button
-                onClick={() => onChange({ teve_aposta: false, valor_aposta: "", time: "", odd: "", cashback_previsto: "" })}
-                style={{ padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: `1px solid ${entry.teve_aposta === false ? "#52525b" : "#3f3f46"}`, background: entry.teve_aposta === false ? "#3f3f46" : "transparent", color: entry.teve_aposta === false ? "#e4e4e7" : "#71717a" }}
-              >Não</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <label style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500 }}>
+                Apostas nesse dia
+              </label>
+              <button onClick={onAddAposta} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#fbbf24", background: "none", border: "1px dashed rgba(251,191,36,.4)", borderRadius: 6, padding: "4px 9px" }}>
+                <Plus size={12} strokeWidth={2.5} /> adicionar aposta
+              </button>
+            </div>
+
+            {apostas.length === 0 && (
+              <div style={{ fontSize: 12, color: "#52525b", padding: "6px 0" }}>Nenhuma aposta registrada nesse dia.</div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {apostas.map((aposta, idx) => (
+                <div key={aposta.id} style={{ border: "1px solid #27292e", borderRadius: 8, padding: 10, background: "rgba(11,13,16,.4)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span className="mono" style={{ fontSize: 11, color: "#52525b" }}>aposta #{idx + 1}</span>
+                    <button onClick={() => onDeleteAposta(aposta.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10 }}>
+                    <Field label="Valor da aposta">
+                      <input type="number" step="0.01" defaultValue={aposta.valor_aposta ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { valor_aposta: e.target.value === "" ? null : e.target.value })} placeholder="0,00" className="input-field" />
+                    </Field>
+                    <Field label="Time">
+                      <input type="text" defaultValue={aposta.time ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { time: e.target.value })} placeholder="ex: Flamengo" className="input-field" />
+                    </Field>
+                    <Field label="Odd">
+                      <input type="number" step="0.01" defaultValue={aposta.odd ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { odd: e.target.value === "" ? null : e.target.value })} placeholder="0,00" className="input-field" />
+                    </Field>
+                    <Field label="Cashback previsto">
+                      <input type="number" step="0.01" defaultValue={aposta.cashback_previsto ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { cashback_previsto: e.target.value === "" ? null : e.target.value })} placeholder={aposta.valor_aposta ? fmtMoney(Number(aposta.valor_aposta) * 0.1) : "auto (10%)"} className="input-field" />
+                    </Field>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {entry.teve_aposta === true && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginBottom: 14 }}>
-              <Field label="Valor da aposta">
-                <input type="number" step="0.01" value={entry.valor_aposta ?? ""} onChange={(e) => onChange({ valor_aposta: e.target.value })} placeholder="0,00" className="input-field" />
-              </Field>
-              <Field label="Time">
-                <input type="text" value={entry.time ?? ""} onChange={(e) => onChange({ time: e.target.value })} placeholder="ex: Flamengo" className="input-field" />
-              </Field>
-              <Field label="Odd">
-                <input type="number" step="0.01" value={entry.odd ?? ""} onChange={(e) => onChange({ odd: e.target.value })} placeholder="0,00" className="input-field" />
-              </Field>
-              <Field label="Cashback previsto">
-                <input type="number" step="0.01" value={entry.cashback_previsto ?? ""} onChange={(e) => onChange({ cashback_previsto: e.target.value })} placeholder={entry.valor_aposta ? fmtMoney(Number(entry.valor_aposta) * 0.1) : "auto (10%)"} className="input-field" />
-              </Field>
-            </div>
-          )}
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14, alignItems: "end" }}>
+          {/* Saldo do dia */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14, alignItems: "end", marginTop: 14 }}>
             <Field label="Saldo da conta nesse dia (print)">
-              <input type="number" step="0.01" value={entry.saldo ?? ""} onChange={(e) => onChange({ saldo: e.target.value })} placeholder="0,00" className="input-field" />
+              <input type="number" step="0.01" value={reg.saldo ?? ""} onChange={(e) => onChangeReg({ saldo: e.target.value })} placeholder="0,00" className="input-field" />
             </Field>
             <div className="mono" style={{ fontSize: 12 }}>
               <div style={{ color: "#71717a", marginBottom: 2 }}>Cashback esperado (p/ amanhã)</div>
-              <div style={{ color: "#fbbf24", fontWeight: 600 }}>{entry.teve_aposta === true ? fmtMoney(expectedToday) : "—"}</div>
+              <div style={{ color: "#fbbf24", fontWeight: 600 }}>{apostas.length > 0 ? fmtMoney(expectedToday) : "—"}</div>
             </div>
             <div className="mono" style={{ fontSize: 12 }}>
               <div style={{ color: "#71717a", marginBottom: 2 }}>Variação vs. cashback de ontem</div>
@@ -416,8 +491,38 @@ function EntryCard({ date, entry, expectedFromYesterday, delta, status, isToday,
             </div>
           </div>
 
+          {/* Print do saldo */}
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 6 }}>
+              Print do saldo
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {reg.imagem_url && (
+                <img
+                  src={reg.imagem_url}
+                  alt="Print do saldo"
+                  onClick={() => setLightbox(true)}
+                  style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid #27292e", cursor: "pointer" }}
+                />
+              )}
+              <label style={{ fontSize: 12, color: "#a1a1aa", border: "1px dashed #3f3f46", borderRadius: 6, padding: "8px 12px", cursor: "pointer" }}>
+                {uploading ? "enviando…" : reg.imagem_url ? "trocar imagem" : "+ anexar print"}
+                <input type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
+              </label>
+            </div>
+          </div>
+
+          {lightbox && reg.imagem_url && (
+            <div
+              onClick={() => setLightbox(false)}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "zoom-out" }}
+            >
+              <img src={reg.imagem_url} alt="Print do saldo ampliado" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 8 }} />
+            </div>
+          )}
+
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <button onClick={onDelete} style={{ background: "none", border: "none", fontSize: 11, color: "#3f3f46", display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={onDeleteDay} style={{ background: "none", border: "none", fontSize: 11, color: "#3f3f46", display: "flex", alignItems: "center", gap: 4 }}>
               <Trash2 size={11} /> limpar este dia
             </button>
           </div>

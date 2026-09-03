@@ -249,6 +249,10 @@ function Dashboard() {
     return accounts.filter((acc) => !(statusByAccount[acc.id]?.[currentWeek]?.usada));
   }, [accounts, statusByAccount, currentWeek]);
 
+  const totalCashbackSemanaTodasContas = useMemo(() => {
+    return accounts.reduce((acc, a) => acc + totalCashback(apostasByAccount[a.id]?.[selectedWeek] || []), 0);
+  }, [accounts, apostasByAccount, selectedWeek]);
+
   const activeAccount = accounts.find((a) => a.id === activeId);
   const apostasDaSemana = apostasByAccount[activeId]?.[selectedWeek] || [];
   const statusDaSemana = statusByAccount[activeId]?.[selectedWeek];
@@ -349,7 +353,7 @@ function Dashboard() {
         ) : (
           <>
             {/* Navegação de semana */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <button onClick={() => setSelectedWeek((w) => addWeeks(w, -1))} style={{ background: "#18181b", border: "1px solid #27292e", borderRadius: 6, color: "#a1a1aa", padding: 6 }}>
                   <ChevronLeft size={15} />
@@ -377,6 +381,12 @@ function Dashboard() {
               ) : (
                 <button onClick={() => setConfirmDeleteAcc(activeAccount.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><Trash2 size={14} /></button>
               )}
+            </div>
+
+            {/* Total geral da semana (todas as contas) */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+              <span style={{ fontSize: 12.5, color: "#d4a72c" }}>Cashback previsto da semana · todas as contas</span>
+              <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: "#fbbf24" }}>{fmtMoney(totalCashbackSemanaTodasContas)}</span>
             </div>
 
             {/* Card da semana */}

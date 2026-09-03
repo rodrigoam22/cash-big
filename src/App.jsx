@@ -303,6 +303,12 @@ function Dashboard() {
           </div>
         )}
 
+        {/* Contador de contas */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, fontSize: 12, color: "#71717a" }} className="mono">
+          <Wallet size={13} />
+          {accounts.length} {accounts.length === 1 ? "conta cadastrada" : "contas cadastradas"}
+        </div>
+
         {/* Abas de conta */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
           {accounts.map((acc) => {

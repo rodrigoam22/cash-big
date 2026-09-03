@@ -268,15 +268,15 @@ function Dashboard() {
   return (
     <div style={{ minHeight: "100vh" }}>
       <header style={{ borderBottom: "1px solid rgba(39,41,46,.8)", position: "sticky", top: 0, background: "rgba(11,13,16,.95)", backdropFilter: "blur(6px)", zIndex: 20 }}>
-        <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", rowGap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#fbbf24,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: "#0b0d10", fontSize: 13 }}>GB</div>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#fbbf24,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: "#0b0d10", fontSize: 13, flexShrink: 0 }}>GB</div>
             <div>
               <h1 style={{ fontSize: 15, fontWeight: 600, color: "#fafafa", margin: 0 }}>Gerenciamento Cash Big</h1>
               <p style={{ fontSize: 11, color: "#71717a", margin: 0 }} className="mono">bigbet · cashback 20% semanal</p>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", rowGap: 8 }}>
             <div style={{ display: "flex", gap: 4, background: "#18181b", border: "1px solid #27292e", borderRadius: 999, padding: 3 }}>
               <button
                 onClick={() => setPagina("semanas")}

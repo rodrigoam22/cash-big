@@ -81,55 +81,91 @@ export default function Calculadora() {
   const salvar = async () => {
     setSaveState("saving");
     let calculoId = calculoAtualId;
+
+    const camposBase = modo === "backlay"
+      ? {
+          modo: "backlay",
+          back_odd: bl.backOdd === "" ? null : bl.backOdd,
+          back_comissao: bl.backComissao === "" ? null : bl.backComissao,
+          back_stake: bl.backStake === "" ? null : bl.backStake,
+          lay_odd: bl.layOdd === "" ? null : bl.layOdd,
+          lay_comissao: bl.layComissao === "" ? null : bl.layComissao,
+          lay_stake: bl.layManual ? (bl.layStake === "" ? null : bl.layStake) : null,
+          lay_manual: bl.layManual,
+          freebet: bl.freebet,
+        }
+      : { modo: "multiplas", stake_total_alvo: targetTotal };
+
     if (calculoId) {
-      await supabase.from("calculos").update({ nome: nomeCalculo, stake_total_alvo: targetTotal, atualizado_em: new Date().toISOString() }).eq("id", calculoId);
-      await supabase.from("casas_calculo").delete().eq("calculo_id", calculoId);
+      await supabase.from("calculos").update({ nome: nomeCalculo, ...camposBase, atualizado_em: new Date().toISOString() }).eq("id", calculoId);
+      if (modo === "multiplas") await supabase.from("casas_calculo").delete().eq("calculo_id", calculoId);
     } else {
-      const { data, error } = await supabase.from("calculos").insert({ nome: nomeCalculo || "Sem nome", stake_total_alvo: targetTotal }).select().single();
+      const { data, error } = await supabase.from("calculos").insert({ nome: nomeCalculo || "Sem nome", ...camposBase }).select().single();
       if (error || !data) { setSaveState("error"); setTimeout(() => setSaveState("idle"), 1200); return; }
       calculoId = data.id;
       setCalculoAtualId(calculoId);
     }
-    const rows = casas.map((c, i) => ({
-      calculo_id: calculoId,
-      ordem: i,
-      nome: c.nome,
-      odd: c.odd === "" ? null : c.odd,
-      comissao: c.comissao === "" ? 0 : c.comissao,
-      stake: c.stake === "" ? null : c.stake,
-      fixado: c.fixado,
-      cashback_ativo: c.cashback_ativo,
-      cashback_pct: c.cashback_pct === "" ? null : c.cashback_pct,
-      conversao_pct: c.conversao_pct === "" ? null : c.conversao_pct,
-      teto: c.teto === "" ? null : c.teto,
-    }));
-    const { error: insErr } = await supabase.from("casas_calculo").insert(rows);
-    setSaveState(insErr ? "error" : "saved");
+
+    if (modo === "multiplas") {
+      const rows = casas.map((c, i) => ({
+        calculo_id: calculoId,
+        ordem: i,
+        nome: c.nome,
+        odd: c.odd === "" ? null : c.odd,
+        comissao: c.comissao === "" ? 0 : c.comissao,
+        stake: c.stake === "" ? null : c.stake,
+        fixado: c.fixado,
+        cashback_ativo: c.cashback_ativo,
+        cashback_pct: c.cashback_pct === "" ? null : c.cashback_pct,
+        conversao_pct: c.conversao_pct === "" ? null : c.conversao_pct,
+        teto: c.teto === "" ? null : c.teto,
+      }));
+      const { error: insErr } = await supabase.from("casas_calculo").insert(rows);
+      setSaveState(insErr ? "error" : "saved");
+    } else {
+      setSaveState("saved");
+    }
     setTimeout(() => setSaveState("idle"), 1200);
     carregarSalvos();
   };
 
   const carregar = async (calculoId) => {
     const { data: calc } = await supabase.from("calculos").select("*").eq("id", calculoId).single();
-    const { data: casasData } = await supabase.from("casas_calculo").select("*").eq("calculo_id", calculoId).order("ordem", { ascending: true });
-    if (calc) {
-      setNomeCalculo(calc.nome || "");
+    if (!calc) return;
+
+    setNomeCalculo(calc.nome || "");
+    setCalculoAtualId(calc.id);
+
+    if (calc.modo === "backlay") {
+      setModo("backlay");
+      setBl({
+        backOdd: calc.back_odd ?? "",
+        backComissao: calc.back_comissao ?? "0",
+        backStake: calc.back_stake ?? "",
+        layOdd: calc.lay_odd ?? "",
+        layComissao: calc.lay_comissao ?? "4.5",
+        layStake: calc.lay_stake ?? "",
+        freebet: !!calc.freebet,
+        layManual: !!calc.lay_manual,
+      });
+    } else {
+      setModo("multiplas");
       setTargetTotal(calc.stake_total_alvo ?? "1000");
-      setCalculoAtualId(calc.id);
-    }
-    if (casasData) {
-      setCasas(casasData.map((c) => ({
-        id: c.id,
-        nome: c.nome || "",
-        odd: c.odd ?? "",
-        comissao: c.comissao ?? "0",
-        stake: c.stake ?? "",
-        fixado: c.fixado,
-        cashback_ativo: c.cashback_ativo,
-        cashback_pct: c.cashback_pct ?? "20",
-        conversao_pct: c.conversao_pct ?? "100",
-        teto: c.teto ?? "",
-      })));
+      const { data: casasData } = await supabase.from("casas_calculo").select("*").eq("calculo_id", calculoId).order("ordem", { ascending: true });
+      if (casasData) {
+        setCasas(casasData.map((c) => ({
+          id: c.id,
+          nome: c.nome || "",
+          odd: c.odd ?? "",
+          comissao: c.comissao ?? "0",
+          stake: c.stake ?? "",
+          fixado: c.fixado,
+          cashback_ativo: c.cashback_ativo,
+          cashback_pct: c.cashback_pct ?? "20",
+          conversao_pct: c.conversao_pct ?? "100",
+          teto: c.teto ?? "",
+        })));
+      }
     }
     setMostrarSalvos(false);
   };
@@ -193,6 +229,51 @@ export default function Calculadora() {
 
   return (
     <div>
+      {/* barra de salvar / carregar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+        <input
+          value={nomeCalculo}
+          onChange={(e) => setNomeCalculo(e.target.value)}
+          placeholder="nome desse cálculo (ex: Flamengo x Palmeiras)"
+          className="input-field"
+          style={{ maxWidth: 280 }}
+        />
+        <button onClick={salvar} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
+          <Save size={13} /> salvar
+        </button>
+        <button onClick={() => setMostrarSalvos((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#18181b", color: "#a1a1aa", border: "1px solid #27292e" }}>
+          <FolderOpen size={13} /> salvos ({salvos.length})
+        </button>
+        <button onClick={novoCalculo} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "transparent", color: "#71717a", border: "1px dashed #3f3f46" }}>
+          + novo cálculo
+        </button>
+        <span style={{ fontSize: 11, color: "#52525b" }} className="mono">
+          {saveState === "saving" && "salvando…"}
+          {saveState === "saved" && <span style={{ color: "#34d399" }}>salvo</span>}
+          {saveState === "error" && <span style={{ color: "#fb7185" }}>erro ao salvar</span>}
+        </span>
+      </div>
+
+      {mostrarSalvos && (
+        <div style={{ border: "1px solid #27292e", borderRadius: 8, marginBottom: 18, overflow: "hidden" }}>
+          {salvos.length === 0 && <div style={{ padding: 14, fontSize: 12, color: "#52525b" }}>Nenhum cálculo salvo ainda.</div>}
+          {salvos.map((s) => (
+            <div key={s.id} onClick={() => carregar(s.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1c1c1f", cursor: "pointer", background: s.id === calculoAtualId ? "rgba(251,191,36,.06)" : "transparent" }}>
+              <div>
+                <div style={{ fontSize: 13, color: "#e4e4e7" }}>
+                  {s.nome || "Sem nome"}
+                  <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 7px", borderRadius: 999, background: s.modo === "backlay" ? "rgba(248,113,113,.12)" : "rgba(45,212,191,.12)", color: s.modo === "backlay" ? "#f87171" : "#2dd4bf" }}>
+                    {s.modo === "backlay" ? "back x lay" : "múltiplas"}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10.5, color: "#52525b" }} className="mono">{new Date(s.atualizado_em).toLocaleString("pt-BR")}</div>
+              </div>
+              <button onClick={(e) => excluirSalvo(s.id, e)} style={{ background: "none", border: "none", color: "#3f3f46" }}><Trash2 size={13} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* seletor de modo */}
       <div style={{ display: "flex", gap: 4, background: "#18181b", border: "1px solid #27292e", borderRadius: 999, padding: 3, width: "fit-content", marginBottom: 18 }}>
         <button
@@ -266,45 +347,6 @@ export default function Calculadora() {
         </div>
       ) : (
       <>
-      {/* barra de salvar / carregar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        <input
-          value={nomeCalculo}
-          onChange={(e) => setNomeCalculo(e.target.value)}
-          placeholder="nome desse cálculo (ex: Flamengo x Palmeiras)"
-          className="input-field"
-          style={{ maxWidth: 280 }}
-        />
-        <button onClick={salvar} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
-          <Save size={13} /> salvar
-        </button>
-        <button onClick={() => setMostrarSalvos((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#18181b", color: "#a1a1aa", border: "1px solid #27292e" }}>
-          <FolderOpen size={13} /> salvos ({salvos.length})
-        </button>
-        <button onClick={novoCalculo} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "transparent", color: "#71717a", border: "1px dashed #3f3f46" }}>
-          + novo cálculo
-        </button>
-        <span style={{ fontSize: 11, color: "#52525b" }} className="mono">
-          {saveState === "saving" && "salvando…"}
-          {saveState === "saved" && <span style={{ color: "#34d399" }}>salvo</span>}
-          {saveState === "error" && <span style={{ color: "#fb7185" }}>erro ao salvar</span>}
-        </span>
-      </div>
-
-      {mostrarSalvos && (
-        <div style={{ border: "1px solid #27292e", borderRadius: 8, marginBottom: 18, overflow: "hidden" }}>
-          {salvos.length === 0 && <div style={{ padding: 14, fontSize: 12, color: "#52525b" }}>Nenhum cálculo salvo ainda.</div>}
-          {salvos.map((s) => (
-            <div key={s.id} onClick={() => carregar(s.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1c1c1f", cursor: "pointer", background: s.id === calculoAtualId ? "rgba(251,191,36,.06)" : "transparent" }}>
-              <div>
-                <div style={{ fontSize: 13, color: "#e4e4e7" }}>{s.nome || "Sem nome"}</div>
-                <div style={{ fontSize: 10.5, color: "#52525b" }} className="mono">{new Date(s.atualizado_em).toLocaleString("pt-BR")}</div>
-              </div>
-              <button onClick={(e) => excluirSalvo(s.id, e)} style={{ background: "none", border: "none", color: "#3f3f46" }}><Trash2 size={13} /></button>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* header casas */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>

@@ -33,10 +33,12 @@ const addWeeks = (weekStartIso, n) => {
 };
 const fmtWeekRange = (weekStartIso) => `${fmtDate(weekStartIso)} — ${fmtDate(weekEndOf(weekStartIso))}`;
 
-const cashbackDe = (aposta) =>
-  aposta.cashback_previsto != null
+const cashbackDe = (aposta) => {
+  if (aposta.resultado !== "red") return 0; // só perda gera cashback
+  return aposta.cashback_previsto != null
     ? Number(aposta.cashback_previsto)
     : (aposta.valor_aposta ? Number(aposta.valor_aposta) * 0.2 : 0);
+};
 
 const totalCashback = (apostas) => (apostas || []).reduce((acc, a) => acc + cashbackDe(a), 0);
 
@@ -429,14 +431,41 @@ function Dashboard() {
               )}
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {apostasDaSemana.map((aposta, idx) => (
-                  <div key={aposta.id} style={{ border: "1px solid #27292e", borderRadius: 8, padding: 10, background: "rgba(11,13,16,.4)" }}>
+                {apostasDaSemana.map((aposta, idx) => {
+                  const corResultado = aposta.resultado === "red" ? "#f43f5e" : aposta.resultado === "green" ? "#22c55e" : "#3f3f46";
+                  return (
+                  <div key={aposta.id} style={{ border: "1px solid #27292e", borderLeft: `3px solid ${corResultado}`, borderRadius: 8, padding: 10, background: "rgba(11,13,16,.4)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                       <span className="mono" style={{ fontSize: 11, color: "#52525b" }}>aposta #{idx + 1}</span>
                       <button onClick={() => deleteAposta(activeAccount.id, selectedWeek, aposta.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}>
                         <Trash2 size={12} />
                       </button>
                     </div>
+
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>Resultado</label>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {[
+                          { v: "pendente", label: "Pendente", on: "#3f3f46", onFg: "#e4e4e7" },
+                          { v: "green", label: "Green", on: "rgba(34,197,94,.18)", onFg: "#4ade80", border: "rgba(34,197,94,.4)" },
+                          { v: "red", label: "Red", on: "rgba(244,63,94,.18)", onFg: "#fb7185", border: "rgba(244,63,94,.4)" },
+                        ].map((opt) => (
+                          <button
+                            key={opt.v}
+                            onClick={() => updateAposta(activeAccount.id, selectedWeek, aposta.id, { resultado: opt.v })}
+                            style={{
+                              padding: "5px 11px", borderRadius: 6, fontSize: 11.5, fontWeight: 500,
+                              border: `1px solid ${aposta.resultado === opt.v ? (opt.border || "#71717a") : "#3f3f46"}`,
+                              background: aposta.resultado === opt.v ? opt.on : "transparent",
+                              color: aposta.resultado === opt.v ? opt.onFg : "#71717a",
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(105px,1fr))", gap: 10 }}>
                       <Field label="Data">
                         <input type="date" defaultValue={aposta.data} onBlur={(e) => updateAposta(activeAccount.id, selectedWeek, aposta.id, { data: e.target.value })} className="input-field" />
@@ -454,8 +483,15 @@ function Dashboard() {
                         <input type="number" step="0.01" defaultValue={aposta.cashback_previsto ?? ""} onBlur={(e) => updateAposta(activeAccount.id, selectedWeek, aposta.id, { cashback_previsto: e.target.value === "" ? null : e.target.value })} placeholder={aposta.valor_aposta ? fmtMoney(Number(aposta.valor_aposta) * 0.2) : "auto (20%)"} className="input-field" />
                       </Field>
                     </div>
+
+                    {aposta.resultado !== "red" && (
+                      <div style={{ marginTop: 8, fontSize: 11, color: "#71717a" }}>
+                        {aposta.resultado === "green" ? "Green — não entra no cashback." : "Pendente — só conta pro cashback se marcada como Red."}
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>

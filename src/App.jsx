@@ -295,6 +295,7 @@ function Dashboard() {
             <button onClick={() => supabase.auth.signOut()} title="Sair" style={{ background: "none", border: "none", color: "#52525b" }}>
               <LogOut size={16} />
             </button>
+            <img src="/avatar.png" alt="avatar" style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid #27292e", objectFit: "cover" }} />
           </div>
         </div>
       </header>

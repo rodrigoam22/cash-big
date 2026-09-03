@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabase";
+import Calculadora from "./Calculadora";
 import {
   Plus, Trash2, Check, X, ChevronLeft, ChevronRight,
   Wallet, LogOut, Sparkles, AlertTriangle,
@@ -110,6 +111,7 @@ function Dashboard() {
   const [selectedWeek, setSelectedWeek] = useState(weekStartOf(todayStr()));
   const [saveState, setSaveState] = useState("idle");
   const [confirmDeleteAcc, setConfirmDeleteAcc] = useState(null);
+  const [pagina, setPagina] = useState("semanas"); // "semanas" | "calculadora"
 
   const currentWeek = weekStartOf(todayStr());
   const todayDow = toDate(todayStr()).getDay(); // 0 domingo ... 6 sábado
@@ -275,6 +277,16 @@ function Dashboard() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ display: "flex", gap: 4, background: "#18181b", border: "1px solid #27292e", borderRadius: 999, padding: 3 }}>
+              <button
+                onClick={() => setPagina("semanas")}
+                style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: pagina === "semanas" ? "#fbbf24" : "transparent", color: pagina === "semanas" ? "#0b0d10" : "#a1a1aa" }}
+              >Contas</button>
+              <button
+                onClick={() => setPagina("calculadora")}
+                style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: pagina === "calculadora" ? "#fbbf24" : "transparent", color: pagina === "calculadora" ? "#0b0d10" : "#a1a1aa" }}
+              >Calculadora</button>
+            </div>
             <div style={{ fontSize: 11, color: "#52525b", height: 16 }} className="mono">
               {saveState === "saving" && "salvando…"}
               {saveState === "saved" && <span style={{ color: "#34d399" }}>salvo</span>}
@@ -288,6 +300,11 @@ function Dashboard() {
       </header>
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 20px" }}>
+        {pagina === "calculadora" ? (
+          <Calculadora />
+        ) : (
+        <>
+
 
         {/* Avisos globais */}
         {todayDow === 0 && (

@@ -19,6 +19,7 @@ const novaCasa = (nome = "") => ({
 });
 
 export default function Calculadora() {
+  const [modo, setModo] = useState("multiplas"); // "multiplas" | "backlay"
   const [casas, setCasas] = useState([novaCasa("Casa 1"), novaCasa("Casa 2"), novaCasa("Casa 3")]);
   const [targetTotal, setTargetTotal] = useState("1000");
   const [nomeCalculo, setNomeCalculo] = useState("");
@@ -26,6 +27,39 @@ export default function Calculadora() {
   const [salvos, setSalvos] = useState([]);
   const [mostrarSalvos, setMostrarSalvos] = useState(false);
   const [saveState, setSaveState] = useState("idle");
+
+  // ---------- modo Back x Lay ----------
+  const [bl, setBl] = useState({
+    backOdd: "", backComissao: "0", backStake: "100",
+    layOdd: "", layComissao: "4.5", layStake: "",
+    freebet: false, layManual: false,
+  });
+  const updateBl = (patch) => setBl((prev) => ({ ...prev, ...patch }));
+
+  const blCalc = useMemo(() => {
+    const backOdd = Number(bl.backOdd || 0);
+    const backComissao = Number(bl.backComissao || 0);
+    const backStake = Number(bl.backStake || 0);
+    const layOdd = Number(bl.layOdd || 0);
+    const layComissao = Number(bl.layComissao || 0);
+
+    const mBack = bl.freebet
+      ? (backOdd - 1) * (1 - backComissao / 100)
+      : 1 + (backOdd - 1) * (1 - backComissao / 100);
+
+    const divisor = layOdd - layComissao / 100;
+    const layStakeAuto = divisor > 0 ? (backStake * mBack) / divisor : 0;
+    const layStake = bl.layManual ? Number(bl.layStake || 0) : layStakeAuto;
+
+    const liability = layStake * (layOdd - 1);
+    const lucroSeSair = bl.freebet
+      ? backStake * (backOdd - 1) * (1 - backComissao / 100) - liability
+      : backStake * (backOdd - 1) * (1 - backComissao / 100) - liability;
+    const lucroSeNaoSair = layStake * (1 - layComissao / 100) - (bl.freebet ? 0 : backStake);
+    const apostaTotal = backStake + liability;
+
+    return { layStakeAuto, layStake, liability, lucroSeSair, lucroSeNaoSair, apostaTotal };
+  }, [bl]);
 
   const carregarSalvos = useCallback(async () => {
     const { data } = await supabase.from("calculos").select("*").order("atualizado_em", { ascending: false });
@@ -159,6 +193,79 @@ export default function Calculadora() {
 
   return (
     <div>
+      {/* seletor de modo */}
+      <div style={{ display: "flex", gap: 4, background: "#18181b", border: "1px solid #27292e", borderRadius: 999, padding: 3, width: "fit-content", marginBottom: 18 }}>
+        <button
+          onClick={() => setModo("multiplas")}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "multiplas" ? "#fbbf24" : "transparent", color: modo === "multiplas" ? "#0b0d10" : "#a1a1aa" }}
+        >Múltiplas casas</button>
+        <button
+          onClick={() => setModo("backlay")}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backlay" ? "#fbbf24" : "transparent", color: modo === "backlay" ? "#0b0d10" : "#a1a1aa" }}
+        >Back x Lay (2 vias)</button>
+      </div>
+
+      {modo === "backlay" ? (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginBottom: 18 }}>
+            {/* BACK */}
+            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#34d399", marginBottom: 10 }}>Back (a favor)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                <Campo label="Odd"><input type="number" step="0.01" value={bl.backOdd} onChange={(e) => updateBl({ backOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
+                <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.backComissao} onChange={(e) => updateBl({ backComissao: e.target.value })} className="input-field" /></Campo>
+              </div>
+              <Campo label="Stake"><input type="number" step="0.01" value={bl.backStake} onChange={(e) => updateBl({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={bl.freebet} onChange={(e) => updateBl({ freebet: e.target.checked })} />
+                Essa é uma aposta grátis (freebet) — stake não é devolvida
+              </label>
+            </div>
+
+            {/* LAY */}
+            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171", marginBottom: 10 }}>Lay (contra / exchange)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                <Campo label="Odd"><input type="number" step="0.01" value={bl.layOdd} onChange={(e) => updateBl({ layOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
+                <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.layComissao} onChange={(e) => updateBl({ layComissao: e.target.value })} className="input-field" /></Campo>
+              </div>
+              <Campo label="Stake (lay)">
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="number" step="0.01"
+                    value={bl.layManual ? bl.layStake : blCalc.layStakeAuto.toFixed(2)}
+                    onChange={(e) => updateBl({ layManual: true, layStake: e.target.value })}
+                    className="input-field"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    onClick={() => updateBl({ layManual: false, layStake: "" })}
+                    title="recalcular automaticamente"
+                    style={{ padding: 7, borderRadius: 6, border: "1px solid #27292e", background: bl.layManual ? "none" : "rgba(251,191,36,.12)", color: bl.layManual ? "#71717a" : "#fbbf24" }}
+                  >
+                    <RefreshCw size={12} />
+                  </button>
+                </div>
+              </Campo>
+              <div style={{ marginTop: 10, fontSize: 11.5, color: "#71717a" }}>
+                Responsabilidade: <span className="mono" style={{ color: "#f87171" }}>{fmt(blCalc.liability)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* resultado */}
+          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 14 }}>Resultado</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
+              <Metric label="Aposta total" value={fmt(blCalc.apostaTotal)} />
+              <Metric label="Responsabilidade (lay)" value={fmt(blCalc.liability)} color="#f87171" />
+              <Metric label="Lucro se SAIR (back ganha)" value={fmt(blCalc.lucroSeSair)} color={blCalc.lucroSeSair >= 0 ? "#34d399" : "#fb7185"} />
+              <Metric label="Lucro se NÃO SAIR (lay ganha)" value={fmt(blCalc.lucroSeNaoSair)} color={blCalc.lucroSeNaoSair >= 0 ? "#34d399" : "#fb7185"} />
+            </div>
+          </div>
+        </div>
+      ) : (
+      <>
       {/* barra de salvar / carregar */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
         <input
@@ -305,6 +412,8 @@ export default function Calculadora() {
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

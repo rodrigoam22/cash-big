@@ -1,30 +1,44 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabase";
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, Check, X,
-  AlertTriangle, Wallet, TrendingUp, Calendar, LogOut,
+  Plus, Trash2, Check, X, ChevronLeft, ChevronRight,
+  Wallet, LogOut, Sparkles, AlertTriangle,
 } from "lucide-react";
 
+// ---------- date / week helpers (semana = domingo a sábado) ----------
 const todayStr = () => new Date().toISOString().slice(0, 10);
-const fmtMoney = (v) =>
-  (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const toDate = (iso) => new Date(iso + "T00:00:00");
+const isoOf = (d) => d.toISOString().slice(0, 10);
 const fmtDate = (iso) => {
   const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+  return `${d}/${m}`;
 };
-const prevDateStr = (iso) => {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+const fmtMoney = (v) =>
+  (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const weekStartOf = (iso) => {
+  const d = toDate(iso);
+  d.setDate(d.getDate() - d.getDay()); // getDay: 0=domingo
+  return isoOf(d);
 };
+const weekEndOf = (weekStartIso) => {
+  const d = toDate(weekStartIso);
+  d.setDate(d.getDate() + 6);
+  return isoOf(d);
+};
+const addWeeks = (weekStartIso, n) => {
+  const d = toDate(weekStartIso);
+  d.setDate(d.getDate() + 7 * n);
+  return isoOf(d);
+};
+const fmtWeekRange = (weekStartIso) => `${fmtDate(weekStartIso)} — ${fmtDate(weekEndOf(weekStartIso))}`;
 
 const cashbackDe = (aposta) =>
   aposta.cashback_previsto != null
     ? Number(aposta.cashback_previsto)
-    : (aposta.valor_aposta ? Number(aposta.valor_aposta) * 0.1 : 0);
+    : (aposta.valor_aposta ? Number(aposta.valor_aposta) * 0.2 : 0);
 
-const totalCashback = (apostasDoDia) =>
-  (apostasDoDia || []).reduce((acc, a) => acc + cashbackDe(a), 0);
+const totalCashback = (apostas) => (apostas || []).reduce((acc, a) => acc + cashbackDe(a), 0);
 
 // ================= LOGIN =================
 function Login() {
@@ -86,14 +100,18 @@ export default function App() {
 function Dashboard() {
   const [accounts, setAccounts] = useState([]);
   const [activeId, setActiveId] = useState(null);
-  const [regByAccount, setRegByAccount] = useState({});      // {accountId: {date: {id, saldo, imagem_url}}}
-  const [apostasByAccount, setApostasByAccount] = useState({}); // {accountId: {date: [aposta,...]}}
+  const [apostasByAccount, setApostasByAccount] = useState({}); // {accountId: {weekStart: [aposta,...]}}
+  const [statusByAccount, setStatusByAccount] = useState({});   // {accountId: {weekStart: {id, usada}}}
   const [loading, setLoading] = useState(true);
   const [newAccountName, setNewAccountName] = useState("");
   const [addingAccount, setAddingAccount] = useState(false);
-  const [openDate, setOpenDate] = useState(todayStr());
+  const [selectedWeek, setSelectedWeek] = useState(weekStartOf(todayStr()));
   const [saveState, setSaveState] = useState("idle");
   const [confirmDeleteAcc, setConfirmDeleteAcc] = useState(null);
+
+  const currentWeek = weekStartOf(todayStr());
+  const todayDow = toDate(todayStr()).getDay(); // 0 domingo ... 6 sábado
+  const isViewingCurrentWeek = selectedWeek === currentWeek;
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -103,20 +121,21 @@ function Dashboard() {
       setActiveId((prev) => prev || accs[0].id);
       const ids = accs.map((a) => a.id);
 
-      const { data: regs } = await supabase.from("registros").select("*").in("conta_id", ids);
-      const regGrouped = {};
-      for (const acc of accs) regGrouped[acc.id] = {};
-      for (const r of regs || []) regGrouped[r.conta_id][r.data] = r;
-      setRegByAccount(regGrouped);
-
       const { data: apostas } = await supabase.from("apostas").select("*").in("conta_id", ids).order("criado_em", { ascending: true });
       const apGrouped = {};
       for (const acc of accs) apGrouped[acc.id] = {};
       for (const a of apostas || []) {
-        if (!apGrouped[a.conta_id][a.data]) apGrouped[a.conta_id][a.data] = [];
-        apGrouped[a.conta_id][a.data].push(a);
+        const ws = weekStartOf(a.data);
+        if (!apGrouped[a.conta_id][ws]) apGrouped[a.conta_id][ws] = [];
+        apGrouped[a.conta_id][ws].push(a);
       }
       setApostasByAccount(apGrouped);
+
+      const { data: statuses } = await supabase.from("semana_status").select("*").in("conta_id", ids);
+      const stGrouped = {};
+      for (const acc of accs) stGrouped[acc.id] = {};
+      for (const s of statuses || []) stGrouped[s.conta_id][s.semana_inicio] = s;
+      setStatusByAccount(stGrouped);
     }
     setLoading(false);
   }, []);
@@ -130,8 +149,8 @@ function Dashboard() {
     const { data, error } = await supabase.from("contas").insert({ nome }).select().single();
     if (!error && data) {
       setAccounts((prev) => [...prev, data]);
-      setRegByAccount((prev) => ({ ...prev, [data.id]: {} }));
       setApostasByAccount((prev) => ({ ...prev, [data.id]: {} }));
+      setStatusByAccount((prev) => ({ ...prev, [data.id]: {} }));
       setActiveId(data.id);
     }
     setNewAccountName("");
@@ -142,114 +161,97 @@ function Dashboard() {
     await supabase.from("contas").delete().eq("id", id);
     const next = accounts.filter((a) => a.id !== id);
     setAccounts(next);
-    setRegByAccount((prev) => { const c = { ...prev }; delete c[id]; return c; });
     setApostasByAccount((prev) => { const c = { ...prev }; delete c[id]; return c; });
+    setStatusByAccount((prev) => { const c = { ...prev }; delete c[id]; return c; });
     if (activeId === id) setActiveId(next[0]?.id ?? null);
     setConfirmDeleteAcc(null);
   };
 
-  // ---------- saldo / imagem (registros) ----------
-  const upsertRegistro = async (accountId, date, patch) => {
+  // ---------- status semanal (usada / não usada) ----------
+  const toggleUsada = async (accountId, weekStart, usada) => {
     setSaveState("saving");
-    const current = regByAccount[accountId]?.[date] || {};
-    const merged = { ...current, ...patch };
-    setRegByAccount((prev) => ({ ...prev, [accountId]: { ...(prev[accountId] || {}), [date]: merged } }));
-    const payload = {
-      conta_id: accountId,
-      data: date,
-      saldo: merged.saldo === "" || merged.saldo == null ? null : merged.saldo,
-      imagem_url: merged.imagem_url || null,
-      atualizado_em: new Date().toISOString(),
-    };
-    const { data, error } = await supabase.from("registros").upsert(payload, { onConflict: "conta_id,data" }).select().single();
+    const current = statusByAccount[accountId]?.[weekStart];
+    setStatusByAccount((prev) => ({
+      ...prev,
+      [accountId]: { ...(prev[accountId] || {}), [weekStart]: { ...(current || {}), usada } },
+    }));
+    const { data, error } = await supabase
+      .from("semana_status")
+      .upsert({ conta_id: accountId, semana_inicio: weekStart, usada, atualizado_em: new Date().toISOString() }, { onConflict: "conta_id,semana_inicio" })
+      .select()
+      .single();
     if (!error && data) {
-      setRegByAccount((prev) => ({ ...prev, [accountId]: { ...(prev[accountId] || {}), [date]: data } }));
+      setStatusByAccount((prev) => ({ ...prev, [accountId]: { ...(prev[accountId] || {}), [weekStart]: data } }));
       setSaveState("saved");
     } else setSaveState("error");
-    setTimeout(() => setSaveState("idle"), 1200);
+    setTimeout(() => setSaveState("idle"), 1000);
   };
 
-  const uploadImage = async (accountId, date, file) => {
-    const path = `${accountId}/${date}-${Date.now()}-${file.name}`;
-    const { error: upErr } = await supabase.storage.from("prints").upload(path, file);
-    if (upErr) { alert("Erro ao enviar imagem: " + upErr.message); return; }
-    const { data } = supabase.storage.from("prints").getPublicUrl(path);
-    await upsertRegistro(accountId, date, { imagem_url: data.publicUrl });
-  };
-
-  // ---------- apostas (múltiplas por dia) ----------
-  const addAposta = async (accountId, date) => {
+  // ---------- apostas ----------
+  const addAposta = async (accountId, weekStart) => {
     setSaveState("saving");
+    const defaultDate = isViewingCurrentWeekFor(weekStart) ? todayStr() : weekStart;
     const { data, error } = await supabase
       .from("apostas")
-      .insert({ conta_id: accountId, data: date, valor_aposta: null, time: "", odd: null, cashback_previsto: null })
+      .insert({ conta_id: accountId, data: defaultDate, valor_aposta: null, time: "", odd: null, cashback_previsto: null })
       .select()
       .single();
     if (!error && data) {
       setApostasByAccount((prev) => {
         const acc = { ...(prev[accountId] || {}) };
-        acc[date] = [...(acc[date] || []), data];
+        acc[weekStart] = [...(acc[weekStart] || []), data];
         return { ...prev, [accountId]: acc };
       });
+      // marca a conta como usada automaticamente ao lançar uma aposta
+      toggleUsada(accountId, weekStart, true);
       setSaveState("saved");
     } else setSaveState("error");
     setTimeout(() => setSaveState("idle"), 1000);
   };
 
-  const updateAposta = async (accountId, date, apostaId, patch) => {
+  function isViewingCurrentWeekFor(weekStart) {
+    return weekStart === currentWeek;
+  }
+
+  const updateAposta = async (accountId, weekStart, apostaId, patch) => {
     setSaveState("saving");
     setApostasByAccount((prev) => {
       const acc = { ...(prev[accountId] || {}) };
-      acc[date] = (acc[date] || []).map((a) => (a.id === apostaId ? { ...a, ...patch } : a));
+      acc[weekStart] = (acc[weekStart] || []).map((a) => (a.id === apostaId ? { ...a, ...patch } : a));
       return { ...prev, [accountId]: acc };
     });
     const { error } = await supabase.from("apostas").update(patch).eq("id", apostaId);
     setSaveState(error ? "error" : "saved");
     setTimeout(() => setSaveState("idle"), 1000);
+    if (patch.data) loadAll(); // data mudou de semana — recarrega agrupamento
   };
 
-  const deleteAposta = async (accountId, date, apostaId) => {
+  const deleteAposta = async (accountId, weekStart, apostaId) => {
     await supabase.from("apostas").delete().eq("id", apostaId);
     setApostasByAccount((prev) => {
       const acc = { ...(prev[accountId] || {}) };
-      acc[date] = (acc[date] || []).filter((a) => a.id !== apostaId);
+      acc[weekStart] = (acc[weekStart] || []).filter((a) => a.id !== apostaId);
       return { ...prev, [accountId]: acc };
     });
   };
 
-  const deleteDay = async (accountId, date) => {
-    const reg = regByAccount[accountId]?.[date];
-    if (reg?.id) await supabase.from("registros").delete().eq("id", reg.id);
-    const apostaIds = (apostasByAccount[accountId]?.[date] || []).map((a) => a.id);
+  const clearWeek = async (accountId, weekStart) => {
+    const apostaIds = (apostasByAccount[accountId]?.[weekStart] || []).map((a) => a.id);
     if (apostaIds.length) await supabase.from("apostas").delete().in("id", apostaIds);
-    setRegByAccount((prev) => { const acc = { ...(prev[accountId] || {}) }; delete acc[date]; return { ...prev, [accountId]: acc }; });
-    setApostasByAccount((prev) => { const acc = { ...(prev[accountId] || {}) }; delete acc[date]; return { ...prev, [accountId]: acc }; });
+    const status = statusByAccount[accountId]?.[weekStart];
+    if (status?.id) await supabase.from("semana_status").delete().eq("id", status.id);
+    setApostasByAccount((prev) => { const acc = { ...(prev[accountId] || {}) }; delete acc[weekStart]; return { ...prev, [accountId]: acc }; });
+    setStatusByAccount((prev) => { const acc = { ...(prev[accountId] || {}) }; delete acc[weekStart]; return { ...prev, [accountId]: acc }; });
   };
+
+  // ---------- avisos globais (baseados na semana ATUAL, não na visualizada) ----------
+  const accountsNotUsedThisWeek = useMemo(() => {
+    return accounts.filter((acc) => !(statusByAccount[acc.id]?.[currentWeek]?.usada));
+  }, [accounts, statusByAccount, currentWeek]);
 
   const activeAccount = accounts.find((a) => a.id === activeId);
-  const activeReg = regByAccount[activeId] || {};
-  const activeApostas = apostasByAccount[activeId] || {};
-
-  const sortedDates = useMemo(() => {
-    const dates = new Set([...Object.keys(activeReg), ...Object.keys(activeApostas)]);
-    dates.add(openDate);
-    return Array.from(dates).sort((a, b) => (a < b ? 1 : -1));
-  }, [activeReg, activeApostas, openDate]);
-
-  const StatusPill = ({ status }) => {
-    const map = {
-      match: { label: "Bateu", icon: Check, bg: "rgba(16,185,129,.15)", fg: "#34d399", border: "rgba(16,185,129,.3)" },
-      mismatch: { label: "Não bateu", icon: X, bg: "rgba(244,63,94,.15)", fg: "#fb7185", border: "rgba(244,63,94,.3)" },
-      pending: { label: "Sem dados", icon: AlertTriangle, bg: "rgba(113,113,122,.1)", fg: "#71717a", border: "rgba(113,113,122,.2)" },
-    };
-    const s = map[status];
-    const Icon = s.icon;
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 999, border: `1px solid ${s.border}`, background: s.bg, color: s.fg, fontSize: 11, fontWeight: 500 }}>
-        <Icon size={11} strokeWidth={2.5} /> {s.label}
-      </span>
-    );
-  };
+  const apostasDaSemana = apostasByAccount[activeId]?.[selectedWeek] || [];
+  const statusDaSemana = statusByAccount[activeId]?.[selectedWeek];
 
   if (loading) {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#71717a" }} className="mono">carregando registros…</div>;
@@ -258,12 +260,12 @@ function Dashboard() {
   return (
     <div style={{ minHeight: "100vh" }}>
       <header style={{ borderBottom: "1px solid rgba(39,41,46,.8)", position: "sticky", top: 0, background: "rgba(11,13,16,.95)", backdropFilter: "blur(6px)", zIndex: 20 }}>
-        <div style={{ maxWidth: 960, margin: "0 auto", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#fbbf24,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: "#0b0d10", fontSize: 13 }}>GB</div>
             <div>
               <h1 style={{ fontSize: 15, fontWeight: 600, color: "#fafafa", margin: 0 }}>Gerenciamento Cash Big</h1>
-              <p style={{ fontSize: 11, color: "#71717a", margin: 0 }} className="mono">bigbet · cashback 10% diário</p>
+              <p style={{ fontSize: 11, color: "#71717a", margin: 0 }} className="mono">bigbet · cashback 20% semanal</p>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -279,22 +281,43 @@ function Dashboard() {
         </div>
       </header>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
-          {accounts.map((acc) => (
-            <button
-              key={acc.id}
-              onClick={() => setActiveId(acc.id)}
-              style={{
-                padding: "6px 14px", borderRadius: 999, fontSize: 13, fontWeight: 500,
-                border: `1px solid ${activeId === acc.id ? "#fbbf24" : "#27292e"}`,
-                background: activeId === acc.id ? "#fbbf24" : "#18181b",
-                color: activeId === acc.id ? "#0b0d10" : "#a1a1aa",
-              }}
-            >
-              {acc.nome}
-            </button>
-          ))}
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 20px" }}>
+
+        {/* Avisos globais */}
+        {todayDow === 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(16,185,129,.08)", border: "1px solid rgba(16,185,129,.25)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#34d399" }}>
+            <Sparkles size={15} />
+            Nova semana de cashback começou hoje — todas as contas foram liberadas novamente.
+          </div>
+        )}
+        {todayDow === 6 && accountsNotUsedThisWeek.length > 0 && (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "rgba(244,63,94,.08)", border: "1px solid rgba(244,63,94,.25)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#fb7185" }}>
+            <AlertTriangle size={15} style={{ marginTop: 1, flexShrink: 0 }} />
+            <span>Hoje é sábado, último dia da semana de cashback. Ainda não usadas: <strong>{accountsNotUsedThisWeek.map((a) => a.nome).join(", ")}</strong>.</span>
+          </div>
+        )}
+
+        {/* Abas de conta */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+          {accounts.map((acc) => {
+            const usadaAtual = statusByAccount[acc.id]?.[currentWeek]?.usada;
+            return (
+              <button
+                key={acc.id}
+                onClick={() => setActiveId(acc.id)}
+                style={{
+                  position: "relative", padding: "6px 14px", borderRadius: 999, fontSize: 13, fontWeight: 500,
+                  border: `1px solid ${activeId === acc.id ? "#fbbf24" : "#27292e"}`,
+                  background: activeId === acc.id ? "#fbbf24" : "#18181b",
+                  color: activeId === acc.id ? "#0b0d10" : "#a1a1aa",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: usadaAtual ? "#34d399" : "#52525b" }} />
+                {acc.nome}
+              </button>
+            );
+          })}
 
           {addingAccount ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -325,11 +348,26 @@ function Dashboard() {
           </div>
         ) : (
           <>
+            {/* Navegação de semana */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#a1a1aa", fontSize: 12 }} className="mono">
-                <TrendingUp size={13} />
-                {sortedDates.filter((d) => activeReg[d]?.saldo != null || (activeApostas[d] || []).length > 0).length} registros
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => setSelectedWeek((w) => addWeeks(w, -1))} style={{ background: "#18181b", border: "1px solid #27292e", borderRadius: 6, color: "#a1a1aa", padding: 6 }}>
+                  <ChevronLeft size={15} />
+                </button>
+                <div style={{ fontSize: 13, color: "#e4e4e7", minWidth: 140, textAlign: "center" }} className="mono">
+                  {fmtWeekRange(selectedWeek)}
+                  {isViewingCurrentWeek && <span style={{ color: "#fbbf24", marginLeft: 6, fontSize: 11 }}>· atual</span>}
+                </div>
+                <button onClick={() => setSelectedWeek((w) => addWeeks(w, 1))} style={{ background: "#18181b", border: "1px solid #27292e", borderRadius: 6, color: "#a1a1aa", padding: 6 }}>
+                  <ChevronRight size={15} />
+                </button>
+                {!isViewingCurrentWeek && (
+                  <button onClick={() => setSelectedWeek(currentWeek)} style={{ fontSize: 11.5, color: "#fbbf24", background: "none", border: "none" }}>
+                    ir para semana atual
+                  </button>
+                )}
               </div>
+
               {confirmDeleteAcc === activeAccount.id ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
                   <span style={{ color: "#71717a" }}>excluir "{activeAccount.nome}" e todo histórico?</span>
@@ -341,193 +379,84 @@ function Dashboard() {
               )}
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <Calendar size={14} color="#52525b" />
-              <input type="date" value={openDate} onChange={(e) => setOpenDate(e.target.value)} className="input-field" style={{ width: "auto" }} />
-              <span style={{ fontSize: 12, color: "#52525b" }}>registrar/editar este dia abaixo</span>
-            </div>
+            {/* Card da semana */}
+            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+              {/* Toggle usada */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, marginBottom: 4 }}>
+                    Conta usada nessa semana?
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => toggleUsada(activeAccount.id, selectedWeek, true)}
+                      style={{ padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: `1px solid ${statusDaSemana?.usada ? "#34d399" : "#3f3f46"}`, background: statusDaSemana?.usada ? "rgba(16,185,129,.15)" : "transparent", color: statusDaSemana?.usada ? "#34d399" : "#71717a" }}
+                    >Usada</button>
+                    <button
+                      onClick={() => toggleUsada(activeAccount.id, selectedWeek, false)}
+                      style={{ padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: `1px solid ${statusDaSemana && !statusDaSemana.usada ? "#52525b" : "#3f3f46"}`, background: statusDaSemana && !statusDaSemana.usada ? "#3f3f46" : "transparent", color: statusDaSemana && !statusDaSemana.usada ? "#e4e4e7" : "#71717a" }}
+                    >Não usada</button>
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#71717a" }} className="mono">cashback previsto (20%)</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#fbbf24" }} className="mono">{fmtMoney(totalCashback(apostasDaSemana))}</div>
+                </div>
+              </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {sortedDates.map((date) => {
-                const reg = activeReg[date] || {};
-                const apostasDoDia = activeApostas[date] || [];
-                const apostasOntem = activeApostas[prevDateStr(date)] || [];
-                const regOntem = activeReg[prevDateStr(date)];
+              {/* Apostas da semana */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <label style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500 }}>
+                  Apostas dessa semana
+                </label>
+                <button onClick={() => addAposta(activeAccount.id, selectedWeek)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#fbbf24", background: "none", border: "1px dashed rgba(251,191,36,.4)", borderRadius: 6, padding: "4px 9px" }}>
+                  <Plus size={12} strokeWidth={2.5} /> adicionar aposta
+                </button>
+              </div>
 
-                const expectedFromYesterday = apostasOntem.length > 0 || regOntem ? totalCashback(apostasOntem) : null;
-                const hasBalanceToday = reg.saldo != null;
-                const hasBalanceYesterday = regOntem?.saldo != null;
-                const delta = hasBalanceToday && hasBalanceYesterday ? Number(reg.saldo) - Number(regOntem.saldo) : null;
+              {apostasDaSemana.length === 0 && (
+                <div style={{ fontSize: 12, color: "#52525b", padding: "6px 0 12px" }}>Nenhuma aposta registrada nessa semana.</div>
+              )}
 
-                let status = "pending";
-                if (expectedFromYesterday != null && delta != null) {
-                  status = Math.abs(delta - expectedFromYesterday) <= 0.5 ? "match" : "mismatch";
-                }
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {apostasDaSemana.map((aposta, idx) => (
+                  <div key={aposta.id} style={{ border: "1px solid #27292e", borderRadius: 8, padding: 10, background: "rgba(11,13,16,.4)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span className="mono" style={{ fontSize: 11, color: "#52525b" }}>aposta #{idx + 1}</span>
+                      <button onClick={() => deleteAposta(activeAccount.id, selectedWeek, aposta.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}>
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(105px,1fr))", gap: 10 }}>
+                      <Field label="Data">
+                        <input type="date" defaultValue={aposta.data} onBlur={(e) => updateAposta(activeAccount.id, selectedWeek, aposta.id, { data: e.target.value })} className="input-field" />
+                      </Field>
+                      <Field label="Valor da aposta">
+                        <input type="number" step="0.01" defaultValue={aposta.valor_aposta ?? ""} onBlur={(e) => updateAposta(activeAccount.id, selectedWeek, aposta.id, { valor_aposta: e.target.value === "" ? null : e.target.value })} placeholder="0,00" className="input-field" />
+                      </Field>
+                      <Field label="Time">
+                        <input type="text" defaultValue={aposta.time ?? ""} onBlur={(e) => updateAposta(activeAccount.id, selectedWeek, aposta.id, { time: e.target.value })} placeholder="ex: Flamengo" className="input-field" />
+                      </Field>
+                      <Field label="Odd">
+                        <input type="number" step="0.01" defaultValue={aposta.odd ?? ""} onBlur={(e) => updateAposta(activeAccount.id, selectedWeek, aposta.id, { odd: e.target.value === "" ? null : e.target.value })} placeholder="0,00" className="input-field" />
+                      </Field>
+                      <Field label="Cashback previsto">
+                        <input type="number" step="0.01" defaultValue={aposta.cashback_previsto ?? ""} onBlur={(e) => updateAposta(activeAccount.id, selectedWeek, aposta.id, { cashback_previsto: e.target.value === "" ? null : e.target.value })} placeholder={aposta.valor_aposta ? fmtMoney(Number(aposta.valor_aposta) * 0.2) : "auto (20%)"} className="input-field" />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-                return (
-                  <EntryCard
-                    key={date}
-                    date={date}
-                    reg={reg}
-                    apostas={apostasDoDia}
-                    expectedFromYesterday={expectedFromYesterday}
-                    delta={delta}
-                    status={status}
-                    isToday={date === openDate}
-                    onChangeReg={(patch) => upsertRegistro(activeAccount.id, date, patch)}
-                    onDeleteDay={() => deleteDay(activeAccount.id, date)}
-                    onUploadImage={(file) => uploadImage(activeAccount.id, date, file)}
-                    onAddAposta={() => addAposta(activeAccount.id, date)}
-                    onChangeAposta={(apostaId, patch) => updateAposta(activeAccount.id, date, apostaId, patch)}
-                    onDeleteAposta={(apostaId) => deleteAposta(activeAccount.id, date, apostaId)}
-                    StatusPill={StatusPill}
-                  />
-                );
-              })}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+                <button onClick={() => clearWeek(activeAccount.id, selectedWeek)} style={{ background: "none", border: "none", fontSize: 11, color: "#3f3f46", display: "flex", alignItems: "center", gap: 4 }}>
+                  <Trash2 size={11} /> limpar essa semana
+                </button>
+              </div>
             </div>
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function EntryCard({
-  date, reg, apostas, expectedFromYesterday, delta, status, isToday,
-  onChangeReg, onDeleteDay, onUploadImage, onAddAposta, onChangeAposta, onDeleteAposta, StatusPill,
-}) {
-  const [expanded, setExpanded] = useState(isToday);
-  const [uploading, setUploading] = useState(false);
-  const [lightbox, setLightbox] = useState(false);
-
-  const expectedToday = totalCashback(apostas);
-
-  const handleFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    await onUploadImage(file);
-    setUploading(false);
-    e.target.value = "";
-  };
-
-  return (
-    <div style={{ borderRadius: 10, border: `1px solid ${isToday ? "rgba(251,191,36,.3)" : "#27292e"}`, background: isToday ? "rgba(251,191,36,.03)" : "rgba(24,24,27,.4)", overflow: "hidden" }}>
-      <button onClick={() => setExpanded((e) => !e)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "none", border: "none", textAlign: "left" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {expanded ? <ChevronDown size={15} color="#52525b" /> : <ChevronRight size={15} color="#52525b" />}
-          <span className="mono" style={{ fontSize: 13, color: "#e4e4e7" }}>{fmtDate(date)}</span>
-          {isToday && <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#fbbf24", fontWeight: 600 }}>hoje</span>}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {apostas.length > 0 && (
-            <span className="mono" style={{ fontSize: 12, color: "#71717a" }}>
-              {apostas.length} {apostas.length === 1 ? "aposta" : "apostas"}
-            </span>
-          )}
-          <StatusPill status={status} />
-        </div>
-      </button>
-
-      {expanded && (
-        <div style={{ padding: "4px 16px 16px", borderTop: "1px solid rgba(39,41,46,.6)" }}>
-          {/* Apostas do dia */}
-          <div style={{ margin: "12px 0" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <label style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500 }}>
-                Apostas nesse dia
-              </label>
-              <button onClick={onAddAposta} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#fbbf24", background: "none", border: "1px dashed rgba(251,191,36,.4)", borderRadius: 6, padding: "4px 9px" }}>
-                <Plus size={12} strokeWidth={2.5} /> adicionar aposta
-              </button>
-            </div>
-
-            {apostas.length === 0 && (
-              <div style={{ fontSize: 12, color: "#52525b", padding: "6px 0" }}>Nenhuma aposta registrada nesse dia.</div>
-            )}
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {apostas.map((aposta, idx) => (
-                <div key={aposta.id} style={{ border: "1px solid #27292e", borderRadius: 8, padding: 10, background: "rgba(11,13,16,.4)" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span className="mono" style={{ fontSize: 11, color: "#52525b" }}>aposta #{idx + 1}</span>
-                    <button onClick={() => onDeleteAposta(aposta.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}>
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10 }}>
-                    <Field label="Valor da aposta">
-                      <input type="number" step="0.01" defaultValue={aposta.valor_aposta ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { valor_aposta: e.target.value === "" ? null : e.target.value })} placeholder="0,00" className="input-field" />
-                    </Field>
-                    <Field label="Time">
-                      <input type="text" defaultValue={aposta.time ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { time: e.target.value })} placeholder="ex: Flamengo" className="input-field" />
-                    </Field>
-                    <Field label="Odd">
-                      <input type="number" step="0.01" defaultValue={aposta.odd ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { odd: e.target.value === "" ? null : e.target.value })} placeholder="0,00" className="input-field" />
-                    </Field>
-                    <Field label="Cashback previsto">
-                      <input type="number" step="0.01" defaultValue={aposta.cashback_previsto ?? ""} onBlur={(e) => onChangeAposta(aposta.id, { cashback_previsto: e.target.value === "" ? null : e.target.value })} placeholder={aposta.valor_aposta ? fmtMoney(Number(aposta.valor_aposta) * 0.1) : "auto (10%)"} className="input-field" />
-                    </Field>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Saldo do dia */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14, alignItems: "end", marginTop: 14 }}>
-            <Field label="Saldo da conta nesse dia (print)">
-              <input type="number" step="0.01" value={reg.saldo ?? ""} onChange={(e) => onChangeReg({ saldo: e.target.value })} placeholder="0,00" className="input-field" />
-            </Field>
-            <div className="mono" style={{ fontSize: 12 }}>
-              <div style={{ color: "#71717a", marginBottom: 2 }}>Cashback esperado (p/ amanhã)</div>
-              <div style={{ color: "#fbbf24", fontWeight: 600 }}>{apostas.length > 0 ? fmtMoney(expectedToday) : "—"}</div>
-            </div>
-            <div className="mono" style={{ fontSize: 12 }}>
-              <div style={{ color: "#71717a", marginBottom: 2 }}>Variação vs. cashback de ontem</div>
-              <div style={{ color: delta == null ? "#52525b" : "#e4e4e7" }}>
-                {delta == null ? "sem dado do dia anterior" : `${fmtMoney(delta)} (esperado ${fmtMoney(expectedFromYesterday || 0)})`}
-              </div>
-            </div>
-          </div>
-
-          {/* Print do saldo */}
-          <div style={{ marginTop: 14 }}>
-            <label style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 6 }}>
-              Print do saldo
-            </label>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {reg.imagem_url && (
-                <img
-                  src={reg.imagem_url}
-                  alt="Print do saldo"
-                  onClick={() => setLightbox(true)}
-                  style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid #27292e", cursor: "pointer" }}
-                />
-              )}
-              <label style={{ fontSize: 12, color: "#a1a1aa", border: "1px dashed #3f3f46", borderRadius: 6, padding: "8px 12px", cursor: "pointer" }}>
-                {uploading ? "enviando…" : reg.imagem_url ? "trocar imagem" : "+ anexar print"}
-                <input type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
-              </label>
-            </div>
-          </div>
-
-          {lightbox && reg.imagem_url && (
-            <div
-              onClick={() => setLightbox(false)}
-              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "zoom-out" }}
-            >
-              <img src={reg.imagem_url} alt="Print do saldo ampliado" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 8 }} />
-            </div>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <button onClick={onDeleteDay} style={{ background: "none", border: "none", fontSize: 11, color: "#3f3f46", display: "flex", alignItems: "center", gap: 4 }}>
-              <Trash2 size={11} /> limpar este dia
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

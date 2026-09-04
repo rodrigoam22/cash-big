@@ -322,9 +322,19 @@ function Dashboard() {
         )}
 
         {/* Contador de contas */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, fontSize: 12, color: "#71717a" }} className="mono">
-          <Wallet size={13} />
-          {accounts.length} {accounts.length === 1 ? "conta cadastrada" : "contas cadastradas"}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10, fontSize: 12, color: "#71717a", flexWrap: "wrap" }} className="mono">
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Wallet size={13} />
+            {accounts.length} {accounts.length === 1 ? "conta cadastrada" : "contas cadastradas"}
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: "#34d399" }} />
+            {accounts.length - accountsNotUsedThisWeek.length} usadas
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: "#52525b" }} />
+            {accountsNotUsedThisWeek.length} disponíveis
+          </span>
         </div>
 
         {/* Abas de conta */}

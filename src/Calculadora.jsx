@@ -31,7 +31,7 @@ export default function Calculadora() {
   // ---------- modo Back x Lay ----------
   const [bl, setBl] = useState({
     backOdd: "", backComissao: "0", backStake: "100",
-    layOdd: "", layComissao: "4.5", layStake: "",
+    layOdd: "", layComissao: "2.8", layStake: "",
     freebet: false, layManual: false,
   });
   const updateBl = (patch) => setBl((prev) => ({ ...prev, ...patch }));
@@ -143,7 +143,7 @@ export default function Calculadora() {
         backComissao: calc.back_comissao ?? "0",
         backStake: calc.back_stake ?? "",
         layOdd: calc.lay_odd ?? "",
-        layComissao: calc.lay_comissao ?? "4.5",
+        layComissao: calc.lay_comissao ?? "2.8",
         layStake: calc.lay_stake ?? "",
         freebet: !!calc.freebet,
         layManual: !!calc.lay_manual,

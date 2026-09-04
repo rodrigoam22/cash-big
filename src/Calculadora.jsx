@@ -215,7 +215,8 @@ export default function Calculadora() {
       const deficit = payout - stakeTotal;
       const seguro = cashbackValor.reduce((acc, v, j) => (j === i ? acc : acc + v), 0);
       const lucro = deficit + seguro;
-      return { id: c.id, nome: c.nome, odd: c.odd, comissao: c.comissao, stake: stakes[i], cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro };
+      const roi = stakeTotal ? (lucro / stakeTotal) * 100 : 0;
+      return { id: c.id, nome: c.nome, odd: c.odd, comissao: c.comissao, stake: stakes[i], cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi };
     });
     const lucros = linhas.map((l) => l.lucro);
     const pior = lucros.length ? Math.min(...lucros) : 0;
@@ -340,8 +341,18 @@ export default function Calculadora() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
               <Metric label="Aposta total" value={fmt(blCalc.apostaTotal)} />
               <Metric label="Responsabilidade (lay)" value={fmt(blCalc.liability)} color="#f87171" />
-              <Metric label="Lucro se SAIR (back ganha)" value={fmt(blCalc.lucroSeSair)} color={blCalc.lucroSeSair >= 0 ? "#34d399" : "#fb7185"} />
-              <Metric label="Lucro se NÃO SAIR (lay ganha)" value={fmt(blCalc.lucroSeNaoSair)} color={blCalc.lucroSeNaoSair >= 0 ? "#34d399" : "#fb7185"} />
+              <Metric
+                label="Lucro se SAIR (back ganha)"
+                value={fmt(blCalc.lucroSeSair)}
+                sub={blCalc.apostaTotal ? `${((blCalc.lucroSeSair / blCalc.apostaTotal) * 100).toFixed(2)}%` : null}
+                color={blCalc.lucroSeSair >= 0 ? "#34d399" : "#fb7185"}
+              />
+              <Metric
+                label="Lucro se NÃO SAIR (lay ganha)"
+                value={fmt(blCalc.lucroSeNaoSair)}
+                sub={blCalc.apostaTotal ? `${((blCalc.lucroSeNaoSair / blCalc.apostaTotal) * 100).toFixed(2)}%` : null}
+                color={blCalc.lucroSeNaoSair >= 0 ? "#34d399" : "#fb7185"}
+              />
             </div>
           </div>
         </div>
@@ -447,7 +458,10 @@ export default function Calculadora() {
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#c084fc" }} className="mono">{l.cashbackPct ? `${l.cashbackPct}%` : "-"}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: l.deficit >= 0 ? "#34d399" : "#fb7185" }} className="mono">{l.deficit >= 0 ? "+" : ""}{fmt(l.deficit)}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#38bdf8" }} className="mono">{l.seguro > 0 ? `+${fmt(l.seguro)}` : fmt(0)}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600, color: l.lucro >= 0 ? "#34d399" : "#fb7185" }} className="mono">{l.lucro >= 0 ? "+" : ""}{fmt(l.lucro)}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600, color: l.lucro >= 0 ? "#34d399" : "#fb7185" }} className="mono">
+                    {l.lucro >= 0 ? "+" : ""}{fmt(l.lucro)}
+                    <div style={{ fontSize: 10.5, fontWeight: 400, opacity: 0.75 }}>{l.roi >= 0 ? "+" : ""}{l.roi.toFixed(2)}%</div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -469,11 +483,12 @@ function Campo({ label, children }) {
   );
 }
 
-function Metric({ label, value, color = "#e4e4e7" }) {
+function Metric({ label, value, sub, color = "#e4e4e7" }) {
   return (
     <div>
       <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>{label}</div>
       <div className="mono" style={{ fontSize: 17, fontWeight: 700, color }}>{value}</div>
+      {sub && <div className="mono" style={{ fontSize: 11, color, opacity: 0.75, marginTop: 1 }}>{sub}</div>}
     </div>
   );
 }

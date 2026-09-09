@@ -33,6 +33,8 @@ export default function Calculadora() {
     backOdd: "", backComissao: "0", backStake: "100",
     layOdd: "", layComissao: "2.8", layStake: "",
     freebet: false, layManual: false,
+    cashbackAtivo: false, cashbackPct: "20", conversaoPct: "100", teto: "",
+    layCashbackAtivo: false, layCashbackPct: "15", layConversaoPct: "100", layTeto: "",
   });
   const updateBl = (patch) => setBl((prev) => ({ ...prev, ...patch }));
 
@@ -47,18 +49,25 @@ export default function Calculadora() {
       ? (backOdd - 1) * (1 - backComissao / 100)
       : 1 + (backOdd - 1) * (1 - backComissao / 100);
 
-    const divisor = layOdd - layComissao / 100;
-    const layStakeAuto = divisor > 0 ? (backStake * mBack) / divisor : 0;
+    const cashbackRaw = bl.cashbackAtivo ? backStake * (Number(bl.cashbackPct || 0) / 100) * (Number(bl.conversaoPct || 0) / 100) : 0;
+    const cashbackTeto = bl.teto === "" ? Infinity : Number(bl.teto);
+    const cashbackValor = Math.min(cashbackRaw, cashbackTeto);
+
+    const layCashbackRate = bl.layCashbackAtivo ? (Number(bl.layCashbackPct || 0) / 100) * (Number(bl.layConversaoPct || 0) / 100) : 0;
+
+    const divisor = layOdd - layComissao / 100 - layCashbackRate;
+    const layStakeAuto = divisor > 0 ? (backStake * mBack - cashbackRaw) / divisor : 0;
     const layStake = bl.layManual ? Number(bl.layStake || 0) : layStakeAuto;
 
+    const layCashbackTeto = bl.layTeto === "" ? Infinity : Number(bl.layTeto);
+    const layCashbackValor = Math.min(layStake * layCashbackRate, layCashbackTeto);
+
     const liability = layStake * (layOdd - 1);
-    const lucroSeSair = bl.freebet
-      ? backStake * (backOdd - 1) * (1 - backComissao / 100) - liability
-      : backStake * (backOdd - 1) * (1 - backComissao / 100) - liability;
-    const lucroSeNaoSair = layStake * (1 - layComissao / 100) - (bl.freebet ? 0 : backStake);
+    const lucroSeSair = backStake * (backOdd - 1) * (1 - backComissao / 100) - liability + layCashbackValor;
+    const lucroSeNaoSair = layStake * (1 - layComissao / 100) - (bl.freebet ? 0 : backStake) + cashbackValor;
     const apostaTotal = backStake + liability;
 
-    return { layStakeAuto, layStake, liability, lucroSeSair, lucroSeNaoSair, apostaTotal };
+    return { layStakeAuto, layStake, liability, lucroSeSair, lucroSeNaoSair, apostaTotal, cashbackValor, layCashbackValor };
   }, [bl]);
 
   const carregarSalvos = useCallback(async () => {
@@ -93,6 +102,14 @@ export default function Calculadora() {
           lay_stake: bl.layManual ? (bl.layStake === "" ? null : bl.layStake) : null,
           lay_manual: bl.layManual,
           freebet: bl.freebet,
+          cashback_ativo: bl.cashbackAtivo,
+          cashback_pct: bl.cashbackPct === "" ? null : bl.cashbackPct,
+          conversao_pct: bl.conversaoPct === "" ? null : bl.conversaoPct,
+          teto: bl.teto === "" ? null : bl.teto,
+          lay_cashback_ativo: bl.layCashbackAtivo,
+          lay_cashback_pct: bl.layCashbackPct === "" ? null : bl.layCashbackPct,
+          lay_conversao_pct: bl.layConversaoPct === "" ? null : bl.layConversaoPct,
+          lay_teto: bl.layTeto === "" ? null : bl.layTeto,
         }
       : { modo: "multiplas", stake_total_alvo: targetTotal };
 
@@ -147,6 +164,14 @@ export default function Calculadora() {
         layStake: calc.lay_stake ?? "",
         freebet: !!calc.freebet,
         layManual: !!calc.lay_manual,
+        cashbackAtivo: !!calc.cashback_ativo,
+        cashbackPct: calc.cashback_pct ?? "20",
+        conversaoPct: calc.conversao_pct ?? "100",
+        teto: calc.teto ?? "",
+        layCashbackAtivo: !!calc.lay_cashback_ativo,
+        layCashbackPct: calc.lay_cashback_pct ?? "15",
+        layConversaoPct: calc.lay_conversao_pct ?? "100",
+        layTeto: calc.lay_teto ?? "",
       });
     } else {
       setModo("multiplas");
@@ -177,7 +202,7 @@ export default function Calculadora() {
     carregarSalvos();
   };
 
-  // ---------- cálculo ----------
+  // ---------- cálculo (modo múltiplas casas) ----------
   const calc = useMemo(() => {
     const m = casas.map((c) => 1 + (Number(c.odd || 0) - 1) * (1 - Number(c.comissao || 0) / 100));
     const cRate = casas.map((c) => (c.cashback_ativo ? (Number(c.cashback_pct || 0) / 100) * (Number(c.conversao_pct || 0) / 100) : 0));
@@ -302,6 +327,20 @@ export default function Calculadora() {
                 <input type="checkbox" checked={bl.freebet} onChange={(e) => updateBl({ freebet: e.target.checked })} />
                 Essa é uma aposta grátis (freebet) — stake não é devolvida
               </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={bl.cashbackAtivo} onChange={(e) => updateBl({ cashbackAtivo: e.target.checked })} />
+                O Back gera cashback se perder
+              </label>
+              {bl.cashbackAtivo && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: 10, background: "rgba(251,191,36,.02)" }}>
+                  <Campo label="Cashback (%)"><input type="number" step="0.01" value={bl.cashbackPct} onChange={(e) => updateBl({ cashbackPct: e.target.value })} className="input-field" /></Campo>
+                  <Campo label="Conversão (%)"><input type="number" step="0.01" value={bl.conversaoPct} onChange={(e) => updateBl({ conversaoPct: e.target.value })} className="input-field" /></Campo>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <Campo label="Teto do cashback (R$, vazio = sem limite)"><input type="number" step="0.01" value={bl.teto} onChange={(e) => updateBl({ teto: e.target.value })} placeholder="sem limite" className="input-field" /></Campo>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* LAY */}
@@ -332,6 +371,28 @@ export default function Calculadora() {
               <div style={{ marginTop: 10, fontSize: 11.5, color: "#71717a" }}>
                 Responsabilidade: <span className="mono" style={{ color: "#f87171" }}>{fmt(blCalc.liability)}</span>
               </div>
+              {bl.cashbackAtivo && (
+                <div style={{ marginTop: 6, fontSize: 11.5, color: "#71717a" }}>
+                  Cashback estimado (se o Back perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(blCalc.cashbackValor)}</span>
+                </div>
+              )}
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={bl.layCashbackAtivo} onChange={(e) => updateBl({ layCashbackAtivo: e.target.checked })} />
+                O Lay gera cashback se perder
+              </label>
+              {bl.layCashbackAtivo && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(248,113,113,.2)", borderRadius: 8, padding: 10, background: "rgba(248,113,113,.02)" }}>
+                  <Campo label="Cashback (%)"><input type="number" step="0.01" value={bl.layCashbackPct} onChange={(e) => updateBl({ layCashbackPct: e.target.value })} className="input-field" /></Campo>
+                  <Campo label="Conversão (%)"><input type="number" step="0.01" value={bl.layConversaoPct} onChange={(e) => updateBl({ layConversaoPct: e.target.value })} className="input-field" /></Campo>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <Campo label="Teto do cashback (R$, vazio = sem limite)"><input type="number" step="0.01" value={bl.layTeto} onChange={(e) => updateBl({ layTeto: e.target.value })} placeholder="sem limite" className="input-field" /></Campo>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#71717a" }}>
+                    Cashback estimado (se o Lay perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(blCalc.layCashbackValor)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -358,7 +419,6 @@ export default function Calculadora() {
         </div>
       ) : (
       <>
-
       {/* header casas */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#71717a" }}>

@@ -5,18 +5,26 @@ import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2 } from
 const uid = () => Math.random().toString(36).slice(2, 9);
 const fmt = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+const novaEntrada = () => ({ id: uid(), odd: "", stake: "" });
+
 const novaCasa = (nome = "") => ({
   id: uid(),
   nome,
-  odd: "",
   comissao: "0",
-  stake: "",
   fixado: false,
   cashback_ativo: false,
   cashback_pct: "20",
   conversao_pct: "100",
   teto: "",
+  entradas: [novaEntrada()],
 });
+
+const totaisCasa = (c) => {
+  const totalStake = c.entradas.reduce((acc, e) => acc + Number(e.stake || 0), 0);
+  const somaPonderada = c.entradas.reduce((acc, e) => acc + Number(e.stake || 0) * Number(e.odd || 0), 0);
+  const oddMedia = totalStake > 0 ? somaPonderada / totalStake : 0;
+  return { totalStake, oddMedia };
+};
 
 export default function Calculadora() {
   const [modo, setModo] = useState("multiplas"); // "multiplas" | "backlay"
@@ -81,6 +89,10 @@ export default function Calculadora() {
   const addCasa = () => setCasas((prev) => [...prev, novaCasa(`Casa ${prev.length + 1}`)]);
   const removeCasa = (id) => setCasas((prev) => (prev.length > 2 ? prev.filter((c) => c.id !== id) : prev));
 
+  const addEntrada = (casaId) => setCasas((prev) => prev.map((c) => (c.id === casaId ? { ...c, entradas: [...c.entradas, novaEntrada()] } : c)));
+  const removeEntrada = (casaId, entradaId) => setCasas((prev) => prev.map((c) => (c.id === casaId && c.entradas.length > 1 ? { ...c, entradas: c.entradas.filter((e) => e.id !== entradaId) } : c)));
+  const updateEntrada = (casaId, entradaId, patch) => setCasas((prev) => prev.map((c) => (c.id === casaId ? { ...c, entradas: c.entradas.map((e) => (e.id === entradaId ? { ...e, ...patch } : e)) } : c)));
+
   const novoCalculo = () => {
     setCasas([novaCasa("Casa 1"), novaCasa("Casa 2"), novaCasa("Casa 3")]);
     setNomeCalculo("");
@@ -124,19 +136,23 @@ export default function Calculadora() {
     }
 
     if (modo === "multiplas") {
-      const rows = casas.map((c, i) => ({
-        calculo_id: calculoId,
-        ordem: i,
-        nome: c.nome,
-        odd: c.odd === "" ? null : c.odd,
-        comissao: c.comissao === "" ? 0 : c.comissao,
-        stake: c.stake === "" ? null : c.stake,
-        fixado: c.fixado,
-        cashback_ativo: c.cashback_ativo,
-        cashback_pct: c.cashback_pct === "" ? null : c.cashback_pct,
-        conversao_pct: c.conversao_pct === "" ? null : c.conversao_pct,
-        teto: c.teto === "" ? null : c.teto,
-      }));
+      const rows = casas.map((c, i) => {
+        const { totalStake, oddMedia } = totaisCasa(c);
+        return {
+          calculo_id: calculoId,
+          ordem: i,
+          nome: c.nome,
+          odd: oddMedia || null,
+          comissao: c.comissao === "" ? 0 : c.comissao,
+          stake: totalStake || null,
+          fixado: c.fixado,
+          cashback_ativo: c.cashback_ativo,
+          cashback_pct: c.cashback_pct === "" ? null : c.cashback_pct,
+          conversao_pct: c.conversao_pct === "" ? null : c.conversao_pct,
+          teto: c.teto === "" ? null : c.teto,
+          entradas: c.entradas.map((e) => ({ odd: e.odd, stake: e.stake })),
+        };
+      });
       const { error: insErr } = await supabase.from("casas_calculo").insert(rows);
       setSaveState(insErr ? "error" : "saved");
     } else {
@@ -181,14 +197,15 @@ export default function Calculadora() {
         setCasas(casasData.map((c) => ({
           id: c.id,
           nome: c.nome || "",
-          odd: c.odd ?? "",
           comissao: c.comissao ?? "0",
-          stake: c.stake ?? "",
           fixado: c.fixado,
           cashback_ativo: c.cashback_ativo,
           cashback_pct: c.cashback_pct ?? "20",
           conversao_pct: c.conversao_pct ?? "100",
           teto: c.teto ?? "",
+          entradas: Array.isArray(c.entradas) && c.entradas.length
+            ? c.entradas.map((e) => ({ id: uid(), odd: e.odd ?? "", stake: e.stake ?? "" }))
+            : [{ id: uid(), odd: c.odd ?? "", stake: c.stake ?? "" }],
         })));
       }
     }
@@ -204,29 +221,41 @@ export default function Calculadora() {
 
   // ---------- cálculo (modo múltiplas casas) ----------
   const calc = useMemo(() => {
-    const m = casas.map((c) => 1 + (Number(c.odd || 0) - 1) * (1 - Number(c.comissao || 0) / 100));
+    const totais = casas.map((c) => totaisCasa(c));
+    const m = casas.map((c, i) => 1 + (totais[i].oddMedia - 1) * (1 - Number(c.comissao || 0) / 100));
     const cRate = casas.map((c) => (c.cashback_ativo ? (Number(c.cashback_pct || 0) / 100) * (Number(c.conversao_pct || 0) / 100) : 0));
     const k = casas.map((_, i) => m[i] - cRate[i]);
-    return { m, cRate, k };
+    return { m, cRate, k, totais };
   }, [casas]);
 
   const autoBalancear = () => {
-    const { k } = calc;
-    const anchorIdx = casas.findIndex((c) => c.fixado && c.stake !== "");
-    let stakes;
+    const { k, totais } = calc;
+    const anchorIdx = casas.findIndex((c, i) => c.fixado && totais[i].totalStake > 0);
+    let targets;
     if (anchorIdx >= 0) {
-      const K = k[anchorIdx] * Number(casas[anchorIdx].stake);
-      stakes = casas.map((c, i) => (i === anchorIdx || c.fixado ? Number(c.stake || 0) : K / k[i]));
+      const K = k[anchorIdx] * totais[anchorIdx].totalStake;
+      targets = casas.map((c, i) => (i === anchorIdx || c.fixado ? totais[i].totalStake : K / k[i]));
     } else {
       const somaInv = k.reduce((acc, ki) => acc + (ki > 0 ? 1 / ki : 0), 0);
       const K = Number(targetTotal || 0) / somaInv;
-      stakes = casas.map((c, i) => (c.fixado ? Number(c.stake || 0) : K / k[i]));
+      targets = casas.map((c, i) => (c.fixado ? totais[i].totalStake : K / k[i]));
     }
-    setCasas((prev) => prev.map((c, i) => (c.fixado ? c : { ...c, stake: stakes[i].toFixed(2) })));
+    setCasas((prev) => prev.map((c, i) => {
+      if (c.fixado) return c;
+      const atual = totais[i].totalStake;
+      const alvo = targets[i];
+      if (atual > 0) {
+        const fator = alvo / atual;
+        return { ...c, entradas: c.entradas.map((e) => ({ ...e, stake: e.stake === "" ? "" : (Number(e.stake) * fator).toFixed(2) })) };
+      }
+      // sem stake ainda: joga tudo na primeira entrada
+      return { ...c, entradas: c.entradas.map((e, idx) => (idx === 0 ? { ...e, stake: alvo.toFixed(2) } : e)) };
+    }));
   };
 
   const resultados = useMemo(() => {
-    const stakes = casas.map((c) => Number(c.stake || 0));
+    const totais = calc.totais;
+    const stakes = totais.map((t) => t.totalStake);
     const stakeTotal = stakes.reduce((a, b) => a + b, 0);
     const { m } = calc;
     const cashbackValor = casas.map((c, i) => {
@@ -241,7 +270,7 @@ export default function Calculadora() {
       const seguro = cashbackValor.reduce((acc, v, j) => (j === i ? acc : acc + v), 0);
       const lucro = deficit + seguro;
       const roi = stakeTotal ? (lucro / stakeTotal) * 100 : 0;
-      return { id: c.id, nome: c.nome, odd: c.odd, comissao: c.comissao, stake: stakes[i], cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi };
+      return { id: c.id, nome: c.nome, oddMedia: totais[i].oddMedia, numEntradas: c.entradas.length, comissao: c.comissao, stake: stakes[i], cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi };
     });
     const lucros = linhas.map((l) => l.lucro);
     const pior = lucros.length ? Math.min(...lucros) : 0;
@@ -441,20 +470,44 @@ export default function Calculadora() {
 
             <input value={c.nome} onChange={(e) => updateCasa(c.id, { nome: e.target.value })} placeholder="nome da casa" className="input-field" style={{ marginBottom: 10, fontWeight: 600, color: "#f4f4f5" }} />
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <Campo label="Odd"><input type="number" step="0.01" value={c.odd} onChange={(e) => updateCasa(c.id, { odd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
               <Campo label="Comissão (%)"><input type="number" step="0.01" value={c.comissao} onChange={(e) => updateCasa(c.id, { comissao: e.target.value })} placeholder="0" className="input-field" /></Campo>
             </div>
 
-            <Campo label="Stake">
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <input type="number" step="0.01" value={c.stake} disabled={!c.fixado && casas.some((x) => x.fixado)} onChange={(e) => updateCasa(c.id, { stake: e.target.value })} placeholder="0,00" className="input-field" style={{ flex: 1, opacity: !c.fixado && casas.some((x) => x.fixado) ? 0.4 : 1 }} />
-                <button onClick={() => navigator.clipboard?.writeText(c.stake)} title="copiar" style={{ padding: 7, borderRadius: 6, border: "1px solid #27292e", background: "none", color: "#71717a" }}><Copy size={12} /></button>
-                <button onClick={() => updateCasa(c.id, { fixado: !c.fixado })} style={{ display: "flex", alignItems: "center", gap: 4, padding: "7px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: c.fixado ? "#fbbf24" : "#27292e", color: c.fixado ? "#0b0d10" : "#a1a1aa", border: "none" }}>
-                  {c.fixado ? <Lock size={11} /> : <Unlock size={11} />} {c.fixado ? "Travada" : "Travar"}
-                </button>
+            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
+              Entradas (odd + stake)
+            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
+              {c.entradas.map((e) => (
+                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input type="number" step="0.01" value={e.odd} onChange={(ev) => updateEntrada(c.id, e.id, { odd: ev.target.value })} placeholder="odd" className="input-field" style={{ width: 70 }} />
+                  <input
+                    type="number" step="0.01" value={e.stake}
+                    disabled={!c.fixado && casas.some((x) => x.fixado)}
+                    onChange={(ev) => updateEntrada(c.id, e.id, { stake: ev.target.value })}
+                    placeholder="stake" className="input-field" style={{ flex: 1, opacity: !c.fixado && casas.some((x) => x.fixado) ? 0.4 : 1 }}
+                  />
+                  {c.entradas.length > 1 && (
+                    <button onClick={() => removeEntrada(c.id, e.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={13} /></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => addEntrada(c.id)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#2dd4bf", background: "none", border: "1px dashed rgba(45,212,191,.4)", borderRadius: 6, padding: "4px 8px", marginBottom: 8 }}>
+              <Plus size={11} /> adicionar entrada
+            </button>
+
+            {c.entradas.length > 1 && (
+              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 8 }} className="mono">
+                Odd média: <span style={{ color: "#e4e4e7" }}>{totaisCasa(c).oddMedia.toFixed(4)}</span> · Stake total: <span style={{ color: "#e4e4e7" }}>{fmt(totaisCasa(c).totalStake)}</span>
               </div>
-            </Campo>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button onClick={() => updateCasa(c.id, { fixado: !c.fixado })} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: c.fixado ? "#fbbf24" : "#27292e", color: c.fixado ? "#0b0d10" : "#a1a1aa", border: "none" }}>
+                {c.fixado ? <Lock size={11} /> : <Unlock size={11} />} {c.fixado ? "Travada" : "Travar"}
+              </button>
+            </div>
 
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
               <input type="checkbox" checked={c.cashback_ativo} onChange={(e) => updateCasa(c.id, { cashback_ativo: e.target.checked })} />
@@ -512,7 +565,9 @@ export default function Calculadora() {
               {resultados.linhas.map((l) => (
                 <tr key={l.id} style={{ borderBottom: "1px solid #1c1c1f" }}>
                   <td style={{ padding: "8px 4px", color: "#e4e4e7", fontWeight: 500 }}>{l.nome || "—"}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">{l.odd || "-"}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">
+                    {l.oddMedia ? l.oddMedia.toFixed(l.numEntradas > 1 ? 4 : 2) : "-"}
+                  </td>
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">{l.comissao}%</td>
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">{fmt(l.stake)}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#c084fc" }} className="mono">{l.cashbackPct ? `${l.cashbackPct}%` : "-"}</td>

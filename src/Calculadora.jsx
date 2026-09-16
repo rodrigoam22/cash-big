@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabase";
-import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2 } from "lucide-react";
+import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2, Calculator } from "lucide-react";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const fmt = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -88,6 +88,32 @@ export default function Calculadora() {
   const updateCasa = (id, patch) => setCasas((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const addCasa = () => setCasas((prev) => [...prev, novaCasa(`Casa ${prev.length + 1}`)]);
   const removeCasa = (id) => setCasas((prev) => (prev.length > 2 ? prev.filter((c) => c.id !== id) : prev));
+
+  const resolverEntrada = (casaId, entradaId) => {
+    const casaIdx = casas.findIndex((c) => c.id === casaId);
+    const casaObj = casas[casaIdx];
+    const entrada = casaObj.entradas.find((e) => e.id === entradaId);
+    const oddX = Number(entrada.odd || 0);
+    if (!oddX) return;
+
+    const outras = casaObj.entradas.filter((e) => e.id !== entradaId);
+    const S0 = outras.reduce((acc, e) => acc + Number(e.stake || 0), 0);
+    const W0 = outras.reduce((acc, e) => acc + Number(e.stake || 0) * Number(e.odd || 0), 0);
+    const factor = 1 - Number(casaObj.comissao || 0) / 100;
+    const mX = 1 + (oddX - 1) * factor;
+    const C0 = S0 + factor * (W0 - S0);
+    const cI = casaObj.cashback_ativo ? (Number(casaObj.cashback_pct || 0) / 100) * (Number(casaObj.conversao_pct || 0) / 100) : 0;
+
+    const anchorIdx = casas.findIndex((c, i) => i !== casaIdx && c.fixado && calc.totais[i].totalStake > 0);
+    if (anchorIdx === -1) return; // sem nenhuma outra casa travada como referência
+
+    const K = calc.k[anchorIdx] * calc.totais[anchorIdx].totalStake;
+    const denom = mX - cI;
+    if (denom === 0) return;
+    const x = (K - C0 + cI * S0) / denom;
+
+    updateEntrada(casaId, entradaId, { stake: Math.max(0, x).toFixed(2) });
+  };
 
   const addEntrada = (casaId) => setCasas((prev) => prev.map((c) => (c.id === casaId ? { ...c, entradas: [...c.entradas, novaEntrada()] } : c)));
   const removeEntrada = (casaId, entradaId) => setCasas((prev) => prev.map((c) => (c.id === casaId && c.entradas.length > 1 ? { ...c, entradas: c.entradas.filter((e) => e.id !== entradaId) } : c)));
@@ -487,6 +513,13 @@ export default function Calculadora() {
                     onChange={(ev) => updateEntrada(c.id, e.id, { stake: ev.target.value })}
                     placeholder="stake" className="input-field" style={{ flex: 1, opacity: !c.fixado && casas.some((x) => x.fixado) ? 0.4 : 1 }}
                   />
+                  <button
+                    onClick={() => resolverEntrada(c.id, e.id)}
+                    title="calcular valor necessário pra equilibrar com outra casa travada"
+                    style={{ padding: 6, borderRadius: 6, border: "1px solid #27292e", background: "none", color: "#fbbf24", flexShrink: 0 }}
+                  >
+                    <Calculator size={12} />
+                  </button>
                   {c.entradas.length > 1 && (
                     <button onClick={() => removeEntrada(c.id, e.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={13} /></button>
                   )}

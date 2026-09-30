@@ -79,6 +79,9 @@ export default function Calculadora() {
 
   const usdToBrl = rate?.value || 5; // fallback razoável se a busca falhar
 
+  const [resultMoeda, setResultMoeda] = useState("BRL");
+  const fmtR = (v) => (resultMoeda === "USD" ? fmtUSD((Number(v) || 0) / usdToBrl) : fmt(v));
+
   // ---------- modo Back x Lay ----------
   const [bl, setBl] = useState({
     backOdd: "", backComissao: "0", backStake: "100", backMoeda: "BRL",
@@ -535,7 +538,7 @@ export default function Calculadora() {
   const temMultiplasFixadas = casas.filter((c) => c.fixado).length > 1;
 
   const CotacaoBar = () => (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#71717a", marginBottom: 14 }} className="mono">
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#71717a", marginBottom: 14, flexWrap: "wrap" }} className="mono">
       <DollarSign size={13} color="#52525b" />
       {rate ? (
         <>
@@ -550,6 +553,9 @@ export default function Calculadora() {
       <button onClick={() => fetchRate(true)} disabled={rateLoading} style={{ background: "none", border: "none", color: "#fbbf24", display: "flex", alignItems: "center" }} title="atualizar cotação agora">
         <RefreshCw size={12} style={{ animation: rateLoading ? "spin 1s linear infinite" : "none" }} />
       </button>
+      <span style={{ color: "#3f3f46", margin: "0 2px" }}>|</span>
+      <span>ver resultados em:</span>
+      <SeletorMoeda value={resultMoeda} onChange={setResultMoeda} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -713,8 +719,8 @@ export default function Calculadora() {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
-                  <Metric label="Lucro se manter a vitória (PA)" value={fmt(dgCalc.lucroSeManter)} color={dgCalc.lucroSeManter >= 0 ? "#34d399" : "#fb7185"} />
-                  <Metric label="Lucro se sair Duplo Green" value={fmt(dgCalc.lucroSeDuploGreen)} color={dgCalc.lucroSeDuploGreen >= 0 ? "#34d399" : "#fb7185"} />
+                  <Metric label="Lucro se manter a vitória (PA)" value={fmtR(dgCalc.lucroSeManter)} color={dgCalc.lucroSeManter >= 0 ? "#34d399" : "#fb7185"} />
+                  <Metric label="Lucro se sair Duplo Green" value={fmtR(dgCalc.lucroSeDuploGreen)} color={dgCalc.lucroSeDuploGreen >= 0 ? "#34d399" : "#fb7185"} />
                 </div>
                 {Math.abs(dgCalc.lucroSeManter - dgCalc.lucroSeDuploGreen) < 0.5 && (
                   <div style={{ marginTop: 10, fontSize: 11.5, color: "#34d399", textAlign: "center" }}>Lucro igual nos dois cenários ✓</div>
@@ -811,16 +817,16 @@ export default function Calculadora() {
             <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultado (em reais)</h2>
             <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Duas apostas normais (back) cobrindo resultados complementares — sem precisar de exchange.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
-              <Metric label="Aposta total" value={fmt(bdcCalc.stakeTotal)} />
+              <Metric label="Aposta total" value={fmtR(bdcCalc.stakeTotal)} />
               <Metric
                 label="Lucro se Back ganhar"
-                value={fmt(bdcCalc.lucroSeBackGanha)}
+                value={fmtR(bdcCalc.lucroSeBackGanha)}
                 sub={bdcCalc.stakeTotal ? `${((bdcCalc.lucroSeBackGanha / bdcCalc.stakeTotal) * 100).toFixed(2)}%` : null}
                 color={bdcCalc.lucroSeBackGanha >= 0 ? "#34d399" : "#fb7185"}
               />
               <Metric
                 label="Lucro se Dupla Chance ganhar"
-                value={fmt(bdcCalc.lucroSeDCGanha)}
+                value={fmtR(bdcCalc.lucroSeDCGanha)}
                 sub={bdcCalc.stakeTotal ? `${((bdcCalc.lucroSeDCGanha / bdcCalc.stakeTotal) * 100).toFixed(2)}%` : null}
                 color={bdcCalc.lucroSeDCGanha >= 0 ? "#34d399" : "#fb7185"}
               />
@@ -923,17 +929,17 @@ export default function Calculadora() {
             <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultado (em reais)</h2>
             <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Valores convertidos pela cotação atual pra dar pra comparar Back e Lay em moedas diferentes.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
-              <Metric label="Aposta total" value={fmt(blCalc.apostaTotal)} />
-              <Metric label="Responsabilidade (lay)" value={fmt(blCalc.liabilityBRL)} color="#f87171" />
+              <Metric label="Aposta total" value={fmtR(blCalc.apostaTotal)} />
+              <Metric label="Responsabilidade (lay)" value={fmtR(blCalc.liabilityBRL)} color="#f87171" />
               <Metric
                 label="Lucro se SAIR (back ganha)"
-                value={fmt(blCalc.lucroSeSair)}
+                value={fmtR(blCalc.lucroSeSair)}
                 sub={blCalc.apostaTotal ? `${((blCalc.lucroSeSair / blCalc.apostaTotal) * 100).toFixed(2)}%` : null}
                 color={blCalc.lucroSeSair >= 0 ? "#34d399" : "#fb7185"}
               />
               <Metric
                 label="Lucro se NÃO SAIR (lay ganha)"
-                value={fmt(blCalc.lucroSeNaoSair)}
+                value={fmtR(blCalc.lucroSeNaoSair)}
                 sub={blCalc.apostaTotal ? `${((blCalc.lucroSeNaoSair / blCalc.apostaTotal) * 100).toFixed(2)}%` : null}
                 color={blCalc.lucroSeNaoSair >= 0 ? "#34d399" : "#fb7185"}
               />
@@ -1066,9 +1072,9 @@ export default function Calculadora() {
           </div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 14, marginBottom: 18 }}>
-          <Metric label="Stake Total" value={fmt(resultados.stakeTotal)} />
-          <Metric label="Pior caso" value={fmt(resultados.pior)} color={resultados.pior >= 0 ? "#34d399" : "#fb7185"} />
-          <Metric label="Melhor caso" value={fmt(resultados.melhor)} color="#34d399" />
+          <Metric label="Stake Total" value={fmtR(resultados.stakeTotal)} />
+          <Metric label="Pior caso" value={fmtR(resultados.pior)} color={resultados.pior >= 0 ? "#34d399" : "#fb7185"} />
+          <Metric label="Melhor caso" value={fmtR(resultados.melhor)} color="#34d399" />
           <Metric label="ROI min/max" value={`${resultados.roiMin.toFixed(2)}% / ${resultados.roiMax.toFixed(2)}%`} />
         </div>
 
@@ -1099,10 +1105,10 @@ export default function Calculadora() {
                     {l.moeda === "USD" && <div style={{ fontSize: 10, color: "#52525b" }}>≈ {fmt(l.stakeBRL)}</div>}
                   </td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#c084fc" }} className="mono">{l.cashbackPct ? `${l.cashbackPct}%` : "-"}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "right", color: l.deficit >= 0 ? "#34d399" : "#fb7185" }} className="mono">{l.deficit >= 0 ? "+" : ""}{fmt(l.deficit)}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "right", color: "#38bdf8" }} className="mono">{l.seguro > 0 ? `+${fmt(l.seguro)}` : fmt(0)}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "right", color: l.deficit >= 0 ? "#34d399" : "#fb7185" }} className="mono">{l.deficit >= 0 ? "+" : ""}{fmtR(l.deficit)}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "right", color: "#38bdf8" }} className="mono">{l.seguro > 0 ? `+${fmtR(l.seguro)}` : fmtR(0)}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600, color: l.lucro >= 0 ? "#34d399" : "#fb7185" }} className="mono">
-                    {l.lucro >= 0 ? "+" : ""}{fmt(l.lucro)}
+                    {l.lucro >= 0 ? "+" : ""}{fmtR(l.lucro)}
                     <div style={{ fontSize: 10.5, fontWeight: 400, opacity: 0.75 }}>{l.roi >= 0 ? "+" : ""}{l.roi.toFixed(2)}%</div>
                   </td>
                 </tr>

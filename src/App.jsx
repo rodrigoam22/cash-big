@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./supabase";
 import Calculadora from "./Calculadora";
-import { LogOut } from "lucide-react";
+import { LogOut, DollarSign } from "lucide-react";
 
 // ================= LOGIN =================
 function Login() {
@@ -23,7 +23,9 @@ function Login() {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <form onSubmit={handleSubmit} style={{ width: 320, padding: 28, background: "#14171b", border: "1px solid #27292e", borderRadius: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,#fbbf24,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: "#0b0d10" }}>GB</div>
+          <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,#fbbf24,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", color: "#0b0d10" }}>
+            <DollarSign size={19} strokeWidth={2.75} />
+          </div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 600, color: "#fafafa" }}>Calculadora Anti PT</div>
             <div style={{ fontSize: 11, color: "#71717a" }} className="mono">entre para continuar</div>
@@ -66,7 +68,9 @@ function Dashboard() {
       <header style={{ borderBottom: "1px solid rgba(39,41,46,.8)", position: "sticky", top: 0, background: "rgba(11,13,16,.95)", backdropFilter: "blur(6px)", zIndex: 20 }}>
         <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", rowGap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#fbbf24,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: "#0b0d10", fontSize: 13, flexShrink: 0 }}>GB</div>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#fbbf24,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", color: "#0b0d10", flexShrink: 0 }}>
+              <DollarSign size={18} strokeWidth={2.75} />
+            </div>
             <div>
               <h1 style={{ fontSize: 15, fontWeight: 600, color: "#fafafa", margin: 0 }}>Calculadora Anti PT</h1>
               <p style={{ fontSize: 11, color: "#71717a", margin: 0 }} className="mono">calculadora de dutching &amp; cashback</p>

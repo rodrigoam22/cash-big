@@ -22,6 +22,7 @@ const novaCasa = (nome = "") => ({
   cashback_pct: "20",
   conversao_pct: "100",
   teto: "",
+  pagamento_antecipado: "",
   entradas: [novaEntrada()],
 });
 
@@ -178,6 +179,52 @@ export default function Calculadora() {
     return { dcStakeAutoNative, dcStakeBRL, stakeTotal, lucroSeBackGanha, lucroSeDCGanha, cashbackBackValor, cashbackDCValor };
   }, [bdc, usdToBrl]);
 
+  // ---------- modo Proteção Duplo Green (2UP) ----------
+  const [dg, setDg] = useState({
+    investimento: "", moeda: "BRL",
+    resultadoTipo: "prejuizo", resultadoValor: "",
+    pagamentoAntecipado: "", oddAoVivo: "",
+    modoStake: "profissional", // "conservadora" | "profissional" | "custom"
+    stakeCustom: "",
+  });
+  const updateDg = (patch) => setDg((prev) => ({ ...prev, ...patch }));
+
+  const dgCalc = useMemo(() => {
+    const fator = dg.moeda === "USD" ? usdToBrl : 1;
+    const pNative = dg.resultadoTipo === "prejuizo" ? -Number(dg.resultadoValor || 0) : Number(dg.resultadoValor || 0);
+    const p = pNative * fator;
+    const a = Number(dg.pagamentoAntecipado || 0) * fator;
+    const odd = Number(dg.oddAoVivo || 0);
+
+    const temDados = odd > 1.01 && (dg.resultadoValor !== "" || dg.pagamentoAntecipado !== "");
+
+    // Proteção Conservadora (risco zero): zera o "lucro se manter vitória (PA)"
+    const stakeConservadoraBRL = odd > 1 ? Math.max(0, -p / (odd - 1)) : 0;
+    // Proteção Profissional (lucro garantido): empata os dois cenários
+    const stakeProfissionalBRL = odd > 0 ? a / odd : 0;
+    // Proteção Agressiva: Profissional + 1/4 da diferença entre Profissional e Conservadora
+    const stakeAgressivaBRL = stakeProfissionalBRL + (stakeProfissionalBRL - stakeConservadoraBRL) / 4;
+    const stakeCustomBRL = Number(dg.stakeCustom || 0) * fator;
+
+    const stakeBRL = dg.modoStake === "conservadora" ? stakeConservadoraBRL
+      : dg.modoStake === "agressiva" ? stakeAgressivaBRL
+      : dg.modoStake === "custom" ? stakeCustomBRL
+      : stakeProfissionalBRL;
+    const stakeNative = fator ? stakeBRL / fator : 0;
+
+    const lucroSeManter = p + stakeBRL * (odd - 1);
+    const lucroSeDuploGreen = a + p - stakeBRL;
+
+    return {
+      temDados, p, a,
+      stakeNative,
+      stakeConservadoraNative: fator ? stakeConservadoraBRL / fator : 0,
+      stakeProfissionalNative: fator ? stakeProfissionalBRL / fator : 0,
+      stakeAgressivaNative: fator ? stakeAgressivaBRL / fator : 0,
+      lucroSeManter, lucroSeDuploGreen,
+    };
+  }, [dg, usdToBrl]);
+
   const carregarSalvos = useCallback(async () => {
     const { data } = await supabase.from("calculos").select("*").order("atualizado_em", { ascending: false });
     setSalvos(data || []);
@@ -273,6 +320,16 @@ export default function Calculadora() {
           dc_conversao_pct: bdc.dcConversaoPct === "" ? null : bdc.dcConversaoPct,
           dc_teto: bdc.dcTeto === "" ? null : bdc.dcTeto,
         }
+      : modo === "dg2up"
+      ? {
+          modo: "dg2up",
+          dg_investimento: dg.investimento === "" ? null : dg.investimento,
+          dg_resultado_tipo: dg.resultadoTipo,
+          dg_resultado_valor: dg.resultadoValor === "" ? null : dg.resultadoValor,
+          dg_pagamento_antecipado: dg.pagamentoAntecipado === "" ? null : dg.pagamentoAntecipado,
+          dg_odd_ao_vivo: dg.oddAoVivo === "" ? null : dg.oddAoVivo,
+          dg_moeda: dg.moeda,
+        }
       : { modo: "multiplas", stake_total_alvo: targetTotal };
 
     if (calculoId) {
@@ -301,6 +358,7 @@ export default function Calculadora() {
           cashback_pct: c.cashback_pct === "" ? null : c.cashback_pct,
           conversao_pct: c.conversao_pct === "" ? null : c.conversao_pct,
           teto: c.teto === "" ? null : c.teto,
+          pagamento_antecipado: c.pagamento_antecipado === "" ? null : c.pagamento_antecipado,
           entradas: c.entradas.map((e) => ({ odd: e.odd, stake: e.stake })),
         };
       });
@@ -363,6 +421,16 @@ export default function Calculadora() {
         dcConversaoPct: calc.dc_conversao_pct ?? "100",
         dcTeto: calc.dc_teto ?? "",
       });
+    } else if (calc.modo === "dg2up") {
+      setModo("dg2up");
+      setDg({
+        investimento: calc.dg_investimento ?? "",
+        moeda: calc.dg_moeda ?? "BRL",
+        resultadoTipo: calc.dg_resultado_tipo ?? "prejuizo",
+        resultadoValor: calc.dg_resultado_valor ?? "",
+        pagamentoAntecipado: calc.dg_pagamento_antecipado ?? "",
+        oddAoVivo: calc.dg_odd_ao_vivo ?? "",
+      });
     } else {
       setModo("multiplas");
       setTargetTotal(calc.stake_total_alvo ?? "1000");
@@ -378,6 +446,7 @@ export default function Calculadora() {
           cashback_pct: c.cashback_pct ?? "20",
           conversao_pct: c.conversao_pct ?? "100",
           teto: c.teto ?? "",
+          pagamento_antecipado: c.pagamento_antecipado ?? "",
           entradas: Array.isArray(c.entradas) && c.entradas.length
             ? c.entradas.map((e) => ({ id: uid(), odd: e.odd ?? "", stake: e.stake ?? "" }))
             : [{ id: uid(), odd: c.odd ?? "", stake: c.stake ?? "" }],
@@ -439,11 +508,13 @@ export default function Calculadora() {
       const teto = c.teto === "" ? Infinity : Number(c.teto);
       return Math.min(raw, teto);
     });
+    const pagamentosBRL = casas.map((c) => Number(c.pagamento_antecipado || 0) * (c.moeda === "USD" ? usdToBrl : 1));
+    const totalPagamentosAntecipados = pagamentosBRL.reduce((a, b) => a + b, 0);
     const linhas = casas.map((c, i) => {
       const payout = stakesBRL[i] * m[i];
       const deficit = payout - stakeTotal;
       const seguro = cashbackValor.reduce((acc, v, j) => (j === i ? acc : acc + v), 0);
-      const lucro = deficit + seguro;
+      const lucro = deficit + seguro + totalPagamentosAntecipados;
       const roi = stakeTotal ? (lucro / stakeTotal) * 100 : 0;
       return {
         id: c.id, nome: c.nome, oddMedia: totais[i].oddMedia, numEntradas: c.entradas.length,
@@ -456,8 +527,8 @@ export default function Calculadora() {
     const melhor = lucros.length ? Math.max(...lucros) : 0;
     const roiMin = stakeTotal ? (pior / stakeTotal) * 100 : 0;
     const roiMax = stakeTotal ? (melhor / stakeTotal) * 100 : 0;
-    return { linhas, stakeTotal, pior, melhor, roiMin, roiMax };
-  }, [casas, calc]);
+    return { linhas, stakeTotal, pior, melhor, roiMin, roiMax, totalPagamentosAntecipados };
+  }, [casas, calc, usdToBrl]);
 
   const temMultiplasFixadas = casas.filter((c) => c.fixado).length > 1;
 
@@ -532,8 +603,8 @@ export default function Calculadora() {
               <div>
                 <div style={{ fontSize: 13, color: "#e4e4e7" }}>
                   {s.nome || "Sem nome"}
-                  <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 7px", borderRadius: 999, background: s.modo === "backlay" ? "rgba(248,113,113,.12)" : s.modo === "backdc" ? "rgba(96,165,250,.12)" : "rgba(45,212,191,.12)", color: s.modo === "backlay" ? "#f87171" : s.modo === "backdc" ? "#60a5fa" : "#2dd4bf" }}>
-                    {s.modo === "backlay" ? "back x lay" : s.modo === "backdc" ? "back + dupla chance" : "múltiplas"}
+                  <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 7px", borderRadius: 999, background: s.modo === "backlay" ? "rgba(248,113,113,.12)" : s.modo === "backdc" ? "rgba(96,165,250,.12)" : s.modo === "dg2up" ? "rgba(251,146,60,.12)" : "rgba(45,212,191,.12)", color: s.modo === "backlay" ? "#f87171" : s.modo === "backdc" ? "#60a5fa" : s.modo === "dg2up" ? "#fb923c" : "#2dd4bf" }}>
+                    {s.modo === "backlay" ? "back x lay" : s.modo === "backdc" ? "back + dupla chance" : s.modo === "dg2up" ? "duplo green 2up" : "múltiplas"}
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#52525b" }} className="mono">{new Date(s.atualizado_em).toLocaleString("pt-BR")}</div>
@@ -558,9 +629,99 @@ export default function Calculadora() {
           onClick={() => setModo("backdc")}
           style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backdc" ? "#fbbf24" : "transparent", color: modo === "backdc" ? "#0b0d10" : "#a1a1aa" }}
         >Back + Dupla Chance</button>
+        <button
+          onClick={() => setModo("dg2up")}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "dg2up" ? "#fbbf24" : "transparent", color: modo === "dg2up" ? "#0b0d10" : "#a1a1aa" }}
+        >Duplo Green (2UP)</button>
       </div>
 
-      {modo === "backdc" ? (
+      {modo === "dg2up" ? (
+        <div>
+          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18, marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", margin: 0 }}>Proteção Duplo Green (2UP)</h2>
+              <SeletorMoeda value={dg.moeda} onChange={(m) => updateDg({ moeda: m })} />
+            </div>
+            <p style={{ fontSize: 11.5, color: "#71717a", marginBottom: 16 }}>
+              Calcule a proteção ao vivo após o 2-0: quanto apostar no time líder pra igualar o lucro, seja qual for o resultado final.
+            </p>
+
+            <div style={{ marginBottom: 14 }}>
+              <Campo label={`Investimento total (${dg.moeda === "USD" ? "US$" : "R$"}, informativo)`}>
+                <input type="number" step="0.01" value={dg.investimento} onChange={(e) => updateDg({ investimento: e.target.value })} placeholder="Ex: 200" className="input-field" />
+              </Campo>
+            </div>
+
+            <div style={{ marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500 }}>
+                Resultado da operação ({dg.moeda === "USD" ? "US$" : "R$"}) se o time NÃO segurar o resultado
+              </label>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button onClick={() => updateDg({ resultadoTipo: "prejuizo" })} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", background: dg.resultadoTipo === "prejuizo" ? "rgba(248,113,113,.2)" : "#27292e", color: dg.resultadoTipo === "prejuizo" ? "#f87171" : "#71717a" }}>Prejuízo</button>
+                <button onClick={() => updateDg({ resultadoTipo: "lucro" })} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", background: dg.resultadoTipo === "lucro" ? "rgba(52,211,153,.2)" : "#27292e", color: dg.resultadoTipo === "lucro" ? "#34d399" : "#71717a" }}>Lucro</button>
+              </div>
+            </div>
+            <input type="number" step="0.01" value={dg.resultadoValor} onChange={(e) => updateDg({ resultadoValor: e.target.value })} placeholder="Ex: 30" className="input-field" style={{ marginBottom: 14 }} />
+
+            <Campo label={`Pagamento antecipado já recebido — 2UP (${dg.moeda === "USD" ? "US$" : "R$"})`}>
+              <input type="number" step="0.01" value={dg.pagamentoAntecipado} onChange={(e) => updateDg({ pagamentoAntecipado: e.target.value })} placeholder="Ex: 118,80" className="input-field" />
+            </Campo>
+            <div style={{ marginTop: 14 }}>
+              <Campo label="Odd atual ao vivo (do time líder)">
+                <input type="number" step="0.01" value={dg.oddAoVivo} onChange={(e) => updateDg({ oddAoVivo: e.target.value })} placeholder="Ex: 1.25" className="input-field" />
+              </Campo>
+            </div>
+          </div>
+
+          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+            {!dgCalc.temDados ? (
+              <div style={{ textAlign: "center", color: "#52525b", padding: "20px 0" }}>
+                <div style={{ fontSize: 13 }}>Preencha o resultado, o pagamento antecipado e a odd ao vivo pra ver a proteção</div>
+                <div style={{ fontSize: 11, marginTop: 4 }}>Odd deve ser maior que 1.01</div>
+              </div>
+            ) : (
+              <>
+                <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 12 }}>Proteção sugerida</h2>
+
+                <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                  <button onClick={() => updateDg({ modoStake: "conservadora" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "conservadora" ? "#38bdf8" : "#27292e"}`, background: dg.modoStake === "conservadora" ? "rgba(56,189,248,.12)" : "transparent", color: dg.modoStake === "conservadora" ? "#38bdf8" : "#a1a1aa" }}>
+                    🛡️ Conservadora (risco zero)
+                  </button>
+                  <button onClick={() => updateDg({ modoStake: "profissional" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "profissional" ? "#fbbf24" : "#27292e"}`, background: dg.modoStake === "profissional" ? "rgba(251,191,36,.12)" : "transparent", color: dg.modoStake === "profissional" ? "#fbbf24" : "#a1a1aa" }}>
+                    ⚡ Profissional (lucro igual)
+                  </button>
+                  <button onClick={() => updateDg({ modoStake: "agressiva" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "agressiva" ? "#34d399" : "#27292e"}`, background: dg.modoStake === "agressiva" ? "rgba(52,211,153,.12)" : "transparent", color: dg.modoStake === "agressiva" ? "#34d399" : "#a1a1aa" }}>
+                    📈 Agressiva (DG maximizado)
+                  </button>
+                  <button onClick={() => updateDg({ modoStake: "custom" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "custom" ? "#a78bfa" : "#27292e"}`, background: dg.modoStake === "custom" ? "rgba(167,139,250,.12)" : "transparent", color: dg.modoStake === "custom" ? "#a78bfa" : "#a1a1aa" }}>
+                    ✎ Personalizada
+                  </button>
+                </div>
+
+                {dg.modoStake === "custom" && (
+                  <div style={{ marginBottom: 14, maxWidth: 200 }}>
+                    <Campo label={`Stake a testar (${dg.moeda === "USD" ? "US$" : "R$"})`}>
+                      <input type="number" step="0.01" value={dg.stakeCustom} onChange={(e) => updateDg({ stakeCustom: e.target.value })} placeholder="0,00" className="input-field" />
+                    </Campo>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 16, fontSize: 13, color: "#e4e4e7" }}>
+                  Aposte <span className="mono" style={{ color: "#fbbf24", fontWeight: 700 }}>{fmtMoeda(dgCalc.stakeNative, dg.moeda)}</span> a favor do time líder, na odd atual ao vivo.
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
+                  <Metric label="Lucro se manter a vitória (PA)" value={fmt(dgCalc.lucroSeManter)} color={dgCalc.lucroSeManter >= 0 ? "#34d399" : "#fb7185"} />
+                  <Metric label="Lucro se sair Duplo Green" value={fmt(dgCalc.lucroSeDuploGreen)} color={dgCalc.lucroSeDuploGreen >= 0 ? "#34d399" : "#fb7185"} />
+                </div>
+                {Math.abs(dgCalc.lucroSeManter - dgCalc.lucroSeDuploGreen) < 0.5 && (
+                  <div style={{ marginTop: 10, fontSize: 11.5, color: "#34d399", textAlign: "center" }}>Lucro igual nos dois cenários ✓</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      ) : modo === "backdc" ? (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginBottom: 18 }}>
             {/* BACK */}
@@ -869,6 +1030,15 @@ export default function Calculadora() {
                 </div>
               </div>
             )}
+
+            <div style={{ marginTop: 10 }}>
+              <Campo label={`Pagamento antecipado recebido — total (2UP, ${c.moeda === "USD" ? "US$" : "R$"}) — opcional`}>
+                <input type="number" step="0.01" value={c.pagamento_antecipado} onChange={(e) => updateCasa(c.id, { pagamento_antecipado: e.target.value })} placeholder="0,00" className="input-field" />
+              </Campo>
+              <div style={{ fontSize: 10.5, color: "#52525b", marginTop: 3 }}>
+                O valor TOTAL pago ("ganhos possíveis"), não só o lucro — ex: apostou 1.094 a 1,83 → coloque 2.002,02
+              </div>
+            </div>
           </div>
         ))}
 
@@ -887,6 +1057,11 @@ export default function Calculadora() {
       <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
         <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultados (em reais)</h2>
         <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Cada casa mantém sua moeda de entrada; aqui tudo é convertido pra reais pra dar pra comparar.</p>
+        {resultados.totalPagamentosAntecipados > 0 && (
+          <div style={{ fontSize: 12, color: "#fbbf24", marginBottom: 14, background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: "8px 12px" }}>
+            Pagamento antecipado (2UP) somado: <strong className="mono">{fmt(resultados.totalPagamentosAntecipados)}</strong> — já incluído como lucro garantido em todas as linhas abaixo, independente do resultado final.
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 14, marginBottom: 18 }}>
           <Metric label="Stake Total" value={fmt(resultados.stakeTotal)} />
           <Metric label="Pior caso" value={fmt(resultados.pior)} color={resultados.pior >= 0 ? "#34d399" : "#fb7185"} />

@@ -38,6 +38,7 @@ export default function Calculadora() {
   const [modo, setModo] = useState("multiplas"); // "multiplas" | "backlay"
   const [casas, setCasas] = useState([novaCasa("Casa 1"), novaCasa("Casa 2"), novaCasa("Casa 3")]);
   const [targetTotal, setTargetTotal] = useState("1000");
+  const [targetMoeda, setTargetMoeda] = useState("BRL");
   const [nomeCalculo, setNomeCalculo] = useState("");
   const [calculoAtualId, setCalculoAtualId] = useState(null);
   const [salvos, setSalvos] = useState([]);
@@ -330,7 +331,7 @@ export default function Calculadora() {
           dg_odd_ao_vivo: dg.oddAoVivo === "" ? null : dg.oddAoVivo,
           dg_moeda: dg.moeda,
         }
-      : { modo: "multiplas", stake_total_alvo: targetTotal };
+      : { modo: "multiplas", stake_total_alvo: targetTotal, stake_total_alvo_moeda: targetMoeda };
 
     if (calculoId) {
       await supabase.from("calculos").update({ nome: nomeCalculo, ...camposBase, atualizado_em: new Date().toISOString() }).eq("id", calculoId);
@@ -434,6 +435,7 @@ export default function Calculadora() {
     } else {
       setModo("multiplas");
       setTargetTotal(calc.stake_total_alvo ?? "1000");
+      setTargetMoeda(calc.stake_total_alvo_moeda ?? "BRL");
       const { data: casasData } = await supabase.from("casas_calculo").select("*").eq("calculo_id", calculoId).order("ordem", { ascending: true });
       if (casasData) {
         setCasas(casasData.map((c) => ({
@@ -482,7 +484,7 @@ export default function Calculadora() {
       targetsBRL = casas.map((c, i) => (i === anchorIdx || c.fixado ? totaisBRL[i] : K / k[i]));
     } else {
       const somaInv = k.reduce((acc, ki) => acc + (ki > 0 ? 1 / ki : 0), 0);
-      const K = Number(targetTotal || 0) / somaInv;
+      const K = (Number(targetTotal || 0) * (targetMoeda === "USD" ? usdToBrl : 1)) / somaInv;
       targetsBRL = casas.map((c, i) => (c.fixado ? totaisBRL[i] : K / k[i]));
     }
     setCasas((prev) => prev.map((c, i) => {
@@ -943,8 +945,9 @@ export default function Calculadora() {
       {/* header casas */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#71717a" }}>
-          <span>Stake total alvo em R$ (se nenhuma stake estiver travada):</span>
+          <span>Stake total alvo (se nenhuma stake estiver travada):</span>
           <input type="number" value={targetTotal} onChange={(e) => setTargetTotal(e.target.value)} className="input-field" style={{ width: 100 }} />
+          <SeletorMoeda value={targetMoeda} onChange={setTargetMoeda} />
         </div>
         <button onClick={autoBalancear} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 500, background: "rgba(45,212,191,.12)", color: "#2dd4bf", border: "1px solid rgba(45,212,191,.3)" }}>
           <RefreshCw size={13} /> Auto-Balancear

@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabase";
-import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2, Calculator } from "lucide-react";
+import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2, Calculator, DollarSign } from "lucide-react";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const fmt = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtUSD = (v) => (Number(v) || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+const fmtMoeda = (v, moeda) => (moeda === "USD" ? fmtUSD(v) : fmt(v));
+
+const RATE_CACHE_KEY = "cashbig_usdbrl_rate";
+const RATE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
 
 const novaEntrada = () => ({ id: uid(), odd: "", stake: "" });
 
@@ -11,6 +16,7 @@ const novaCasa = (nome = "") => ({
   id: uid(),
   nome,
   comissao: "0",
+  moeda: "BRL",
   fixado: false,
   cashback_ativo: false,
   cashback_pct: "20",
@@ -19,6 +25,7 @@ const novaCasa = (nome = "") => ({
   entradas: [novaEntrada()],
 });
 
+// totais na moeda NATIVA da própria casa — odd média não depende de moeda
 const totaisCasa = (c) => {
   const totalStake = c.entradas.reduce((acc, e) => acc + Number(e.stake || 0), 0);
   const somaPonderada = c.entradas.reduce((acc, e) => acc + Number(e.stake || 0) * Number(e.odd || 0), 0);
@@ -36,10 +43,44 @@ export default function Calculadora() {
   const [mostrarSalvos, setMostrarSalvos] = useState(false);
   const [saveState, setSaveState] = useState("idle");
 
+  // ---------- cotação USD -> BRL ----------
+  const [rate, setRate] = useState(null); // { value, updatedAt }
+  const [rateLoading, setRateLoading] = useState(false);
+
+  const fetchRate = useCallback(async (force = false) => {
+    if (!force) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(RATE_CACHE_KEY) || "null");
+        if (cached && Date.now() - cached.updatedAt < RATE_MAX_AGE) {
+          setRate(cached);
+          return;
+        }
+      } catch {}
+    }
+    setRateLoading(true);
+    try {
+      const res = await fetch("https://open.er-api.com/v6/latest/USD");
+      const data = await res.json();
+      const value = data?.rates?.BRL;
+      if (value) {
+        const payload = { value, updatedAt: Date.now() };
+        setRate(payload);
+        try { localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(payload)); } catch {}
+      }
+    } catch (e) {
+      console.error("Erro ao buscar cotação USD/BRL", e);
+    }
+    setRateLoading(false);
+  }, []);
+
+  useEffect(() => { fetchRate(); }, [fetchRate]);
+
+  const usdToBrl = rate?.value || 5; // fallback razoável se a busca falhar
+
   // ---------- modo Back x Lay ----------
   const [bl, setBl] = useState({
-    backOdd: "", backComissao: "0", backStake: "100",
-    layOdd: "", layComissao: "2.8", layStake: "",
+    backOdd: "", backComissao: "0", backStake: "100", backMoeda: "BRL",
+    layOdd: "", layComissao: "2.8", layStake: "", layMoeda: "BRL",
     freebet: false, layManual: false,
     cashbackAtivo: false, cashbackPct: "20", conversaoPct: "100", teto: "",
     layCashbackAtivo: false, layCashbackPct: "15", layConversaoPct: "100", layTeto: "",
@@ -47,9 +88,13 @@ export default function Calculadora() {
   const updateBl = (patch) => setBl((prev) => ({ ...prev, ...patch }));
 
   const blCalc = useMemo(() => {
+    const backFator = bl.backMoeda === "USD" ? usdToBrl : 1;
+    const layFator = bl.layMoeda === "USD" ? usdToBrl : 1;
+
     const backOdd = Number(bl.backOdd || 0);
     const backComissao = Number(bl.backComissao || 0);
-    const backStake = Number(bl.backStake || 0);
+    const backStakeNative = Number(bl.backStake || 0);
+    const backStakeBRL = backStakeNative * backFator;
     const layOdd = Number(bl.layOdd || 0);
     const layComissao = Number(bl.layComissao || 0);
 
@@ -57,26 +102,81 @@ export default function Calculadora() {
       ? (backOdd - 1) * (1 - backComissao / 100)
       : 1 + (backOdd - 1) * (1 - backComissao / 100);
 
-    const cashbackRaw = bl.cashbackAtivo ? backStake * (Number(bl.cashbackPct || 0) / 100) * (Number(bl.conversaoPct || 0) / 100) : 0;
+    const cashbackRaw = bl.cashbackAtivo ? backStakeBRL * (Number(bl.cashbackPct || 0) / 100) * (Number(bl.conversaoPct || 0) / 100) : 0;
     const cashbackTeto = bl.teto === "" ? Infinity : Number(bl.teto);
     const cashbackValor = Math.min(cashbackRaw, cashbackTeto);
 
     const layCashbackRate = bl.layCashbackAtivo ? (Number(bl.layCashbackPct || 0) / 100) * (Number(bl.layConversaoPct || 0) / 100) : 0;
 
     const divisor = layOdd - layComissao / 100 - layCashbackRate;
-    const layStakeAuto = divisor > 0 ? (backStake * mBack - cashbackRaw) / divisor : 0;
-    const layStake = bl.layManual ? Number(bl.layStake || 0) : layStakeAuto;
+    const layStakeAutoBRL = divisor > 0 ? (backStakeBRL * mBack - cashbackRaw) / divisor : 0;
+    const layStakeAutoNative = layFator ? layStakeAutoBRL / layFator : 0;
+
+    const layStakeNative = bl.layManual ? Number(bl.layStake || 0) : layStakeAutoNative;
+    const layStakeBRL = layStakeNative * layFator;
 
     const layCashbackTeto = bl.layTeto === "" ? Infinity : Number(bl.layTeto);
-    const layCashbackValor = Math.min(layStake * layCashbackRate, layCashbackTeto);
+    const layCashbackValor = Math.min(layStakeBRL * layCashbackRate, layCashbackTeto);
 
-    const liability = layStake * (layOdd - 1);
-    const lucroSeSair = backStake * (backOdd - 1) * (1 - backComissao / 100) - liability + layCashbackValor;
-    const lucroSeNaoSair = layStake * (1 - layComissao / 100) - (bl.freebet ? 0 : backStake) + cashbackValor;
-    const apostaTotal = backStake + liability;
+    const liabilityBRL = layStakeBRL * (layOdd - 1);
+    const lucroSeSair = backStakeBRL * (backOdd - 1) * (1 - backComissao / 100) - liabilityBRL + layCashbackValor;
+    const lucroSeNaoSair = layStakeBRL * (1 - layComissao / 100) - (bl.freebet ? 0 : backStakeBRL) + cashbackValor;
+    const apostaTotal = backStakeBRL + liabilityBRL;
+    const liabilityNative = layFator ? liabilityBRL / layFator : 0;
 
-    return { layStakeAuto, layStake, liability, lucroSeSair, lucroSeNaoSair, apostaTotal, cashbackValor, layCashbackValor };
-  }, [bl]);
+    return { layStakeAutoNative, layStakeBRL, liabilityBRL, liabilityNative, lucroSeSair, lucroSeNaoSair, apostaTotal, cashbackValor, layCashbackValor };
+  }, [bl, usdToBrl]);
+
+  // ---------- modo Back + Dupla Chance ----------
+  const [bdc, setBdc] = useState({
+    backOdd: "", backComissao: "0", backStake: "100", backMoeda: "BRL",
+    dcOdd: "", dcComissao: "0", dcStake: "", dcMoeda: "BRL", dcManual: false,
+    cashbackAtivo: false, cashbackPct: "20", conversaoPct: "100", teto: "",
+    dcCashbackAtivo: false, dcCashbackPct: "20", dcConversaoPct: "100", dcTeto: "",
+  });
+  const updateBdc = (patch) => setBdc((prev) => ({ ...prev, ...patch }));
+
+  const bdcCalc = useMemo(() => {
+    const backFator = bdc.backMoeda === "USD" ? usdToBrl : 1;
+    const dcFator = bdc.dcMoeda === "USD" ? usdToBrl : 1;
+
+    const backOdd = Number(bdc.backOdd || 0);
+    const backComissao = Number(bdc.backComissao || 0);
+    const backStakeNative = Number(bdc.backStake || 0);
+    const backStakeBRL = backStakeNative * backFator;
+    const dcOdd = Number(bdc.dcOdd || 0);
+    const dcComissao = Number(bdc.dcComissao || 0);
+
+    const mBack = 1 + (backOdd - 1) * (1 - backComissao / 100);
+    const mDC = 1 + (dcOdd - 1) * (1 - dcComissao / 100);
+
+    const cBack = bdc.cashbackAtivo ? (Number(bdc.cashbackPct || 0) / 100) * (Number(bdc.conversaoPct || 0) / 100) : 0;
+    const cDC = bdc.dcCashbackAtivo ? (Number(bdc.dcCashbackPct || 0) / 100) * (Number(bdc.dcConversaoPct || 0) / 100) : 0;
+
+    const kBack = mBack - cBack;
+    const kDC = mDC - cDC;
+
+    const dcStakeAutoBRL = kDC > 0 ? (backStakeBRL * kBack) / kDC : 0;
+    const dcStakeAutoNative = dcFator ? dcStakeAutoBRL / dcFator : 0;
+
+    const dcStakeNative = bdc.dcManual ? Number(bdc.dcStake || 0) : dcStakeAutoNative;
+    const dcStakeBRL = dcStakeNative * dcFator;
+
+    const stakeTotal = backStakeBRL + dcStakeBRL;
+
+    const cashbackTeto = bdc.teto === "" ? Infinity : Number(bdc.teto);
+    const cashbackBackValor = Math.min(backStakeBRL * cBack, cashbackTeto);
+    const dcCashbackTeto = bdc.dcTeto === "" ? Infinity : Number(bdc.dcTeto);
+    const cashbackDCValor = Math.min(dcStakeBRL * cDC, dcCashbackTeto);
+
+    const payoutBack = backStakeBRL * mBack;
+    const payoutDC = dcStakeBRL * mDC;
+
+    const lucroSeBackGanha = payoutBack - stakeTotal + cashbackDCValor;
+    const lucroSeDCGanha = payoutDC - stakeTotal + cashbackBackValor;
+
+    return { dcStakeAutoNative, dcStakeBRL, stakeTotal, lucroSeBackGanha, lucroSeDCGanha, cashbackBackValor, cashbackDCValor };
+  }, [bdc, usdToBrl]);
 
   const carregarSalvos = useCallback(async () => {
     const { data } = await supabase.from("calculos").select("*").order("atualizado_em", { ascending: false });
@@ -88,6 +188,10 @@ export default function Calculadora() {
   const updateCasa = (id, patch) => setCasas((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const addCasa = () => setCasas((prev) => [...prev, novaCasa(`Casa ${prev.length + 1}`)]);
   const removeCasa = (id) => setCasas((prev) => (prev.length > 2 ? prev.filter((c) => c.id !== id) : prev));
+
+  const addEntrada = (casaId) => setCasas((prev) => prev.map((c) => (c.id === casaId ? { ...c, entradas: [...c.entradas, novaEntrada()] } : c)));
+  const removeEntrada = (casaId, entradaId) => setCasas((prev) => prev.map((c) => (c.id === casaId && c.entradas.length > 1 ? { ...c, entradas: c.entradas.filter((e) => e.id !== entradaId) } : c)));
+  const updateEntrada = (casaId, entradaId, patch) => setCasas((prev) => prev.map((c) => (c.id === casaId ? { ...c, entradas: c.entradas.map((e) => (e.id === entradaId ? { ...e, ...patch } : e)) } : c)));
 
   const resolverEntrada = (casaId, entradaId) => {
     const casaIdx = casas.findIndex((c) => c.id === casaId);
@@ -103,21 +207,18 @@ export default function Calculadora() {
     const mX = 1 + (oddX - 1) * factor;
     const C0 = S0 + factor * (W0 - S0);
     const cI = casaObj.cashback_ativo ? (Number(casaObj.cashback_pct || 0) / 100) * (Number(casaObj.conversao_pct || 0) / 100) : 0;
+    const fatorEsta = casaObj.moeda === "USD" ? usdToBrl : 1;
 
-    const anchorIdx = casas.findIndex((c, i) => i !== casaIdx && c.fixado && calc.totais[i].totalStake > 0);
+    const anchorIdx = casas.findIndex((c, i) => i !== casaIdx && c.fixado && calc.totaisBRL[i] > 0);
     if (anchorIdx === -1) return; // sem nenhuma outra casa travada como referência
 
-    const K = calc.k[anchorIdx] * calc.totais[anchorIdx].totalStake;
+    const K = calc.k[anchorIdx] * calc.totaisBRL[anchorIdx];
     const denom = mX - cI;
     if (denom === 0) return;
-    const x = (K - C0 + cI * S0) / denom;
+    const x = (K / fatorEsta - C0 + cI * S0) / denom;
 
     updateEntrada(casaId, entradaId, { stake: Math.max(0, x).toFixed(2) });
   };
-
-  const addEntrada = (casaId) => setCasas((prev) => prev.map((c) => (c.id === casaId ? { ...c, entradas: [...c.entradas, novaEntrada()] } : c)));
-  const removeEntrada = (casaId, entradaId) => setCasas((prev) => prev.map((c) => (c.id === casaId && c.entradas.length > 1 ? { ...c, entradas: c.entradas.filter((e) => e.id !== entradaId) } : c)));
-  const updateEntrada = (casaId, entradaId, patch) => setCasas((prev) => prev.map((c) => (c.id === casaId ? { ...c, entradas: c.entradas.map((e) => (e.id === entradaId ? { ...e, ...patch } : e)) } : c)));
 
   const novoCalculo = () => {
     setCasas([novaCasa("Casa 1"), novaCasa("Casa 2"), novaCasa("Casa 3")]);
@@ -135,10 +236,12 @@ export default function Calculadora() {
           back_odd: bl.backOdd === "" ? null : bl.backOdd,
           back_comissao: bl.backComissao === "" ? null : bl.backComissao,
           back_stake: bl.backStake === "" ? null : bl.backStake,
+          back_moeda: bl.backMoeda,
           lay_odd: bl.layOdd === "" ? null : bl.layOdd,
           lay_comissao: bl.layComissao === "" ? null : bl.layComissao,
           lay_stake: bl.layManual ? (bl.layStake === "" ? null : bl.layStake) : null,
           lay_manual: bl.layManual,
+          lay_moeda: bl.layMoeda,
           freebet: bl.freebet,
           cashback_ativo: bl.cashbackAtivo,
           cashback_pct: bl.cashbackPct === "" ? null : bl.cashbackPct,
@@ -148,6 +251,27 @@ export default function Calculadora() {
           lay_cashback_pct: bl.layCashbackPct === "" ? null : bl.layCashbackPct,
           lay_conversao_pct: bl.layConversaoPct === "" ? null : bl.layConversaoPct,
           lay_teto: bl.layTeto === "" ? null : bl.layTeto,
+        }
+      : modo === "backdc"
+      ? {
+          modo: "backdc",
+          back_odd: bdc.backOdd === "" ? null : bdc.backOdd,
+          back_comissao: bdc.backComissao === "" ? null : bdc.backComissao,
+          back_stake: bdc.backStake === "" ? null : bdc.backStake,
+          back_moeda: bdc.backMoeda,
+          cashback_ativo: bdc.cashbackAtivo,
+          cashback_pct: bdc.cashbackPct === "" ? null : bdc.cashbackPct,
+          conversao_pct: bdc.conversaoPct === "" ? null : bdc.conversaoPct,
+          teto: bdc.teto === "" ? null : bdc.teto,
+          dc_odd: bdc.dcOdd === "" ? null : bdc.dcOdd,
+          dc_comissao: bdc.dcComissao === "" ? null : bdc.dcComissao,
+          dc_stake: bdc.dcManual ? (bdc.dcStake === "" ? null : bdc.dcStake) : null,
+          dc_moeda: bdc.dcMoeda,
+          dc_manual: bdc.dcManual,
+          dc_cashback_ativo: bdc.dcCashbackAtivo,
+          dc_cashback_pct: bdc.dcCashbackPct === "" ? null : bdc.dcCashbackPct,
+          dc_conversao_pct: bdc.dcConversaoPct === "" ? null : bdc.dcConversaoPct,
+          dc_teto: bdc.dcTeto === "" ? null : bdc.dcTeto,
         }
       : { modo: "multiplas", stake_total_alvo: targetTotal };
 
@@ -171,6 +295,7 @@ export default function Calculadora() {
           odd: oddMedia || null,
           comissao: c.comissao === "" ? 0 : c.comissao,
           stake: totalStake || null,
+          moeda: c.moeda,
           fixado: c.fixado,
           cashback_ativo: c.cashback_ativo,
           cashback_pct: c.cashback_pct === "" ? null : c.cashback_pct,
@@ -201,9 +326,11 @@ export default function Calculadora() {
         backOdd: calc.back_odd ?? "",
         backComissao: calc.back_comissao ?? "0",
         backStake: calc.back_stake ?? "",
+        backMoeda: calc.back_moeda ?? "BRL",
         layOdd: calc.lay_odd ?? "",
         layComissao: calc.lay_comissao ?? "2.8",
         layStake: calc.lay_stake ?? "",
+        layMoeda: calc.lay_moeda ?? "BRL",
         freebet: !!calc.freebet,
         layManual: !!calc.lay_manual,
         cashbackAtivo: !!calc.cashback_ativo,
@@ -215,6 +342,27 @@ export default function Calculadora() {
         layConversaoPct: calc.lay_conversao_pct ?? "100",
         layTeto: calc.lay_teto ?? "",
       });
+    } else if (calc.modo === "backdc") {
+      setModo("backdc");
+      setBdc({
+        backOdd: calc.back_odd ?? "",
+        backComissao: calc.back_comissao ?? "0",
+        backStake: calc.back_stake ?? "",
+        backMoeda: calc.back_moeda ?? "BRL",
+        dcOdd: calc.dc_odd ?? "",
+        dcComissao: calc.dc_comissao ?? "0",
+        dcStake: calc.dc_stake ?? "",
+        dcMoeda: calc.dc_moeda ?? "BRL",
+        dcManual: !!calc.dc_manual,
+        cashbackAtivo: !!calc.cashback_ativo,
+        cashbackPct: calc.cashback_pct ?? "20",
+        conversaoPct: calc.conversao_pct ?? "100",
+        teto: calc.teto ?? "",
+        dcCashbackAtivo: !!calc.dc_cashback_ativo,
+        dcCashbackPct: calc.dc_cashback_pct ?? "20",
+        dcConversaoPct: calc.dc_conversao_pct ?? "100",
+        dcTeto: calc.dc_teto ?? "",
+      });
     } else {
       setModo("multiplas");
       setTargetTotal(calc.stake_total_alvo ?? "1000");
@@ -224,6 +372,7 @@ export default function Calculadora() {
           id: c.id,
           nome: c.nome || "",
           comissao: c.comissao ?? "0",
+          moeda: c.moeda ?? "BRL",
           fixado: c.fixado,
           cashback_ativo: c.cashback_ativo,
           cashback_pct: c.cashback_pct ?? "20",
@@ -248,55 +397,59 @@ export default function Calculadora() {
   // ---------- cálculo (modo múltiplas casas) ----------
   const calc = useMemo(() => {
     const totais = casas.map((c) => totaisCasa(c));
+    const totaisBRL = casas.map((c, i) => totais[i].totalStake * (c.moeda === "USD" ? usdToBrl : 1));
     const m = casas.map((c, i) => 1 + (totais[i].oddMedia - 1) * (1 - Number(c.comissao || 0) / 100));
     const cRate = casas.map((c) => (c.cashback_ativo ? (Number(c.cashback_pct || 0) / 100) * (Number(c.conversao_pct || 0) / 100) : 0));
     const k = casas.map((_, i) => m[i] - cRate[i]);
-    return { m, cRate, k, totais };
-  }, [casas]);
+    return { m, cRate, k, totais, totaisBRL };
+  }, [casas, usdToBrl]);
 
   const autoBalancear = () => {
-    const { k, totais } = calc;
-    const anchorIdx = casas.findIndex((c, i) => c.fixado && totais[i].totalStake > 0);
-    let targets;
+    const { k, totais, totaisBRL } = calc;
+    const anchorIdx = casas.findIndex((c, i) => c.fixado && totaisBRL[i] > 0);
+    let targetsBRL;
     if (anchorIdx >= 0) {
-      const K = k[anchorIdx] * totais[anchorIdx].totalStake;
-      targets = casas.map((c, i) => (i === anchorIdx || c.fixado ? totais[i].totalStake : K / k[i]));
+      const K = k[anchorIdx] * totaisBRL[anchorIdx];
+      targetsBRL = casas.map((c, i) => (i === anchorIdx || c.fixado ? totaisBRL[i] : K / k[i]));
     } else {
       const somaInv = k.reduce((acc, ki) => acc + (ki > 0 ? 1 / ki : 0), 0);
       const K = Number(targetTotal || 0) / somaInv;
-      targets = casas.map((c, i) => (c.fixado ? totais[i].totalStake : K / k[i]));
+      targetsBRL = casas.map((c, i) => (c.fixado ? totaisBRL[i] : K / k[i]));
     }
     setCasas((prev) => prev.map((c, i) => {
       if (c.fixado) return c;
-      const atual = totais[i].totalStake;
-      const alvo = targets[i];
-      if (atual > 0) {
-        const fator = alvo / atual;
+      const fatorC = c.moeda === "USD" ? usdToBrl : 1;
+      const alvoNative = targetsBRL[i] / fatorC;
+      const atualNative = totais[i].totalStake;
+      if (atualNative > 0) {
+        const fator = alvoNative / atualNative;
         return { ...c, entradas: c.entradas.map((e) => ({ ...e, stake: e.stake === "" ? "" : (Number(e.stake) * fator).toFixed(2) })) };
       }
-      // sem stake ainda: joga tudo na primeira entrada
-      return { ...c, entradas: c.entradas.map((e, idx) => (idx === 0 ? { ...e, stake: alvo.toFixed(2) } : e)) };
+      return { ...c, entradas: c.entradas.map((e, idx) => (idx === 0 ? { ...e, stake: alvoNative.toFixed(2) } : e)) };
     }));
   };
 
   const resultados = useMemo(() => {
-    const totais = calc.totais;
-    const stakes = totais.map((t) => t.totalStake);
-    const stakeTotal = stakes.reduce((a, b) => a + b, 0);
-    const { m } = calc;
+    const stakesBRL = calc.totaisBRL;
+    const stakeTotal = stakesBRL.reduce((a, b) => a + b, 0);
+    const { m, totais } = calc;
     const cashbackValor = casas.map((c, i) => {
       if (!c.cashback_ativo) return 0;
-      const raw = stakes[i] * (Number(c.cashback_pct || 0) / 100) * (Number(c.conversao_pct || 0) / 100);
+      const raw = stakesBRL[i] * (Number(c.cashback_pct || 0) / 100) * (Number(c.conversao_pct || 0) / 100);
       const teto = c.teto === "" ? Infinity : Number(c.teto);
       return Math.min(raw, teto);
     });
     const linhas = casas.map((c, i) => {
-      const payout = stakes[i] * m[i];
+      const payout = stakesBRL[i] * m[i];
       const deficit = payout - stakeTotal;
       const seguro = cashbackValor.reduce((acc, v, j) => (j === i ? acc : acc + v), 0);
       const lucro = deficit + seguro;
       const roi = stakeTotal ? (lucro / stakeTotal) * 100 : 0;
-      return { id: c.id, nome: c.nome, oddMedia: totais[i].oddMedia, numEntradas: c.entradas.length, comissao: c.comissao, stake: stakes[i], cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi };
+      return {
+        id: c.id, nome: c.nome, oddMedia: totais[i].oddMedia, numEntradas: c.entradas.length,
+        comissao: c.comissao, stakeNative: totais[i].totalStake, moeda: c.moeda, stakeBRL: stakesBRL[i],
+        cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi,
+      };
     });
     const lucros = linhas.map((l) => l.lucro);
     const pior = lucros.length ? Math.min(...lucros) : 0;
@@ -308,8 +461,44 @@ export default function Calculadora() {
 
   const temMultiplasFixadas = casas.filter((c) => c.fixado).length > 1;
 
+  const CotacaoBar = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#71717a", marginBottom: 14 }} className="mono">
+      <DollarSign size={13} color="#52525b" />
+      {rate ? (
+        <>
+          1 USD = {fmt(rate.value)}
+          <span style={{ color: "#52525b" }}>
+            · atualizada {new Date(rate.updatedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </>
+      ) : (
+        <span>buscando cotação…</span>
+      )}
+      <button onClick={() => fetchRate(true)} disabled={rateLoading} style={{ background: "none", border: "none", color: "#fbbf24", display: "flex", alignItems: "center" }} title="atualizar cotação agora">
+        <RefreshCw size={12} style={{ animation: rateLoading ? "spin 1s linear infinite" : "none" }} />
+      </button>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
+  const SeletorMoeda = ({ value, onChange }) => (
+    <div style={{ display: "flex", gap: 2, background: "#0b0d10", border: "1px solid #27292e", borderRadius: 6, padding: 2 }}>
+      {["BRL", "USD"].map((m) => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: value === m ? "#fbbf24" : "transparent", color: value === m ? "#0b0d10" : "#71717a" }}
+        >
+          {m === "BRL" ? "R$" : "US$"}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div>
+      <CotacaoBar />
+
       {/* barra de salvar / carregar */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
         <input
@@ -343,8 +532,8 @@ export default function Calculadora() {
               <div>
                 <div style={{ fontSize: 13, color: "#e4e4e7" }}>
                   {s.nome || "Sem nome"}
-                  <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 7px", borderRadius: 999, background: s.modo === "backlay" ? "rgba(248,113,113,.12)" : "rgba(45,212,191,.12)", color: s.modo === "backlay" ? "#f87171" : "#2dd4bf" }}>
-                    {s.modo === "backlay" ? "back x lay" : "múltiplas"}
+                  <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 7px", borderRadius: 999, background: s.modo === "backlay" ? "rgba(248,113,113,.12)" : s.modo === "backdc" ? "rgba(96,165,250,.12)" : "rgba(45,212,191,.12)", color: s.modo === "backlay" ? "#f87171" : s.modo === "backdc" ? "#60a5fa" : "#2dd4bf" }}>
+                    {s.modo === "backlay" ? "back x lay" : s.modo === "backdc" ? "back + dupla chance" : "múltiplas"}
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#52525b" }} className="mono">{new Date(s.atualizado_em).toLocaleString("pt-BR")}</div>
@@ -365,19 +554,130 @@ export default function Calculadora() {
           onClick={() => setModo("backlay")}
           style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backlay" ? "#fbbf24" : "transparent", color: modo === "backlay" ? "#0b0d10" : "#a1a1aa" }}
         >Back x Lay (2 vias)</button>
+        <button
+          onClick={() => setModo("backdc")}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backdc" ? "#fbbf24" : "transparent", color: modo === "backdc" ? "#0b0d10" : "#a1a1aa" }}
+        >Back + Dupla Chance</button>
       </div>
 
-      {modo === "backlay" ? (
+      {modo === "backdc" ? (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginBottom: 18 }}>
             {/* BACK */}
             <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#34d399", marginBottom: 10 }}>Back (a favor)</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#34d399" }}>Back (seleção principal)</div>
+                <SeletorMoeda value={bdc.backMoeda} onChange={(m) => updateBdc({ backMoeda: m })} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                <Campo label="Odd"><input type="number" step="0.01" value={bdc.backOdd} onChange={(e) => updateBdc({ backOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
+                <Campo label="Comissão (%)"><input type="number" step="0.01" value={bdc.backComissao} onChange={(e) => updateBdc({ backComissao: e.target.value })} className="input-field" /></Campo>
+              </div>
+              <Campo label={`Stake (${bdc.backMoeda === "USD" ? "US$" : "R$"})`}><input type="number" step="0.01" value={bdc.backStake} onChange={(e) => updateBdc({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={bdc.cashbackAtivo} onChange={(e) => updateBdc({ cashbackAtivo: e.target.checked })} />
+                O Back gera cashback se perder
+              </label>
+              {bdc.cashbackAtivo && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: 10, background: "rgba(251,191,36,.02)" }}>
+                  <Campo label="Cashback (%)"><input type="number" step="0.01" value={bdc.cashbackPct} onChange={(e) => updateBdc({ cashbackPct: e.target.value })} className="input-field" /></Campo>
+                  <Campo label="Conversão (%)"><input type="number" step="0.01" value={bdc.conversaoPct} onChange={(e) => updateBdc({ conversaoPct: e.target.value })} className="input-field" /></Campo>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <Campo label="Teto do cashback (R$, vazio = sem limite)"><input type="number" step="0.01" value={bdc.teto} onChange={(e) => updateBdc({ teto: e.target.value })} placeholder="sem limite" className="input-field" /></Campo>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* DUPLA CHANCE */}
+            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>Dupla Chance (cobre o resto)</div>
+                <SeletorMoeda value={bdc.dcMoeda} onChange={(m) => updateBdc({ dcMoeda: m })} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                <Campo label="Odd"><input type="number" step="0.01" value={bdc.dcOdd} onChange={(e) => updateBdc({ dcOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
+                <Campo label="Comissão (%)"><input type="number" step="0.01" value={bdc.dcComissao} onChange={(e) => updateBdc({ dcComissao: e.target.value })} className="input-field" /></Campo>
+              </div>
+              <Campo label={`Stake (${bdc.dcMoeda === "USD" ? "US$" : "R$"})`}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="number" step="0.01"
+                    value={bdc.dcManual ? bdc.dcStake : bdcCalc.dcStakeAutoNative.toFixed(2)}
+                    onChange={(e) => updateBdc({ dcManual: true, dcStake: e.target.value })}
+                    className="input-field"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    onClick={() => updateBdc({ dcManual: false, dcStake: "" })}
+                    title="recalcular automaticamente"
+                    style={{ padding: 7, borderRadius: 6, border: "1px solid #27292e", background: bdc.dcManual ? "none" : "rgba(251,191,36,.12)", color: bdc.dcManual ? "#71717a" : "#fbbf24" }}
+                  >
+                    <RefreshCw size={12} />
+                  </button>
+                </div>
+              </Campo>
+              {bdc.cashbackAtivo && (
+                <div style={{ marginTop: 10, fontSize: 11.5, color: "#71717a" }}>
+                  Cashback estimado (se o Back perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(bdcCalc.cashbackBackValor)}</span>
+                </div>
+              )}
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={bdc.dcCashbackAtivo} onChange={(e) => updateBdc({ dcCashbackAtivo: e.target.checked })} />
+                A Dupla Chance gera cashback se perder
+              </label>
+              {bdc.dcCashbackAtivo && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(248,113,113,.2)", borderRadius: 8, padding: 10, background: "rgba(248,113,113,.02)" }}>
+                  <Campo label="Cashback (%)"><input type="number" step="0.01" value={bdc.dcCashbackPct} onChange={(e) => updateBdc({ dcCashbackPct: e.target.value })} className="input-field" /></Campo>
+                  <Campo label="Conversão (%)"><input type="number" step="0.01" value={bdc.dcConversaoPct} onChange={(e) => updateBdc({ dcConversaoPct: e.target.value })} className="input-field" /></Campo>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <Campo label="Teto do cashback (R$, vazio = sem limite)"><input type="number" step="0.01" value={bdc.dcTeto} onChange={(e) => updateBdc({ dcTeto: e.target.value })} placeholder="sem limite" className="input-field" /></Campo>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#71717a" }}>
+                    Cashback estimado (se a Dupla Chance perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(bdcCalc.cashbackDCValor)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* resultado */}
+          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultado (em reais)</h2>
+            <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Duas apostas normais (back) cobrindo resultados complementares — sem precisar de exchange.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
+              <Metric label="Aposta total" value={fmt(bdcCalc.stakeTotal)} />
+              <Metric
+                label="Lucro se Back ganhar"
+                value={fmt(bdcCalc.lucroSeBackGanha)}
+                sub={bdcCalc.stakeTotal ? `${((bdcCalc.lucroSeBackGanha / bdcCalc.stakeTotal) * 100).toFixed(2)}%` : null}
+                color={bdcCalc.lucroSeBackGanha >= 0 ? "#34d399" : "#fb7185"}
+              />
+              <Metric
+                label="Lucro se Dupla Chance ganhar"
+                value={fmt(bdcCalc.lucroSeDCGanha)}
+                sub={bdcCalc.stakeTotal ? `${((bdcCalc.lucroSeDCGanha / bdcCalc.stakeTotal) * 100).toFixed(2)}%` : null}
+                color={bdcCalc.lucroSeDCGanha >= 0 ? "#34d399" : "#fb7185"}
+              />
+            </div>
+          </div>
+        </div>
+      ) : modo === "backlay" ? (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginBottom: 18 }}>
+            {/* BACK */}
+            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#34d399" }}>Back (a favor)</div>
+                <SeletorMoeda value={bl.backMoeda} onChange={(m) => updateBl({ backMoeda: m })} />
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                 <Campo label="Odd"><input type="number" step="0.01" value={bl.backOdd} onChange={(e) => updateBl({ backOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.backComissao} onChange={(e) => updateBl({ backComissao: e.target.value })} className="input-field" /></Campo>
               </div>
-              <Campo label="Stake"><input type="number" step="0.01" value={bl.backStake} onChange={(e) => updateBl({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+              <Campo label={`Stake (${bl.backMoeda === "USD" ? "US$" : "R$"})`}><input type="number" step="0.01" value={bl.backStake} onChange={(e) => updateBl({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
                 <input type="checkbox" checked={bl.freebet} onChange={(e) => updateBl({ freebet: e.target.checked })} />
                 Essa é uma aposta grátis (freebet) — stake não é devolvida
@@ -400,16 +700,19 @@ export default function Calculadora() {
 
             {/* LAY */}
             <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171", marginBottom: 10 }}>Lay (contra / exchange)</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>Lay (contra / exchange)</div>
+                <SeletorMoeda value={bl.layMoeda} onChange={(m) => updateBl({ layMoeda: m })} />
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                 <Campo label="Odd"><input type="number" step="0.01" value={bl.layOdd} onChange={(e) => updateBl({ layOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.layComissao} onChange={(e) => updateBl({ layComissao: e.target.value })} className="input-field" /></Campo>
               </div>
-              <Campo label="Stake (lay)">
+              <Campo label={`Stake (lay, ${bl.layMoeda === "USD" ? "US$" : "R$"})`}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <input
                     type="number" step="0.01"
-                    value={bl.layManual ? bl.layStake : blCalc.layStakeAuto.toFixed(2)}
+                    value={bl.layManual ? bl.layStake : blCalc.layStakeAutoNative.toFixed(2)}
                     onChange={(e) => updateBl({ layManual: true, layStake: e.target.value })}
                     className="input-field"
                     style={{ flex: 1 }}
@@ -424,7 +727,8 @@ export default function Calculadora() {
                 </div>
               </Campo>
               <div style={{ marginTop: 10, fontSize: 11.5, color: "#71717a" }}>
-                Responsabilidade: <span className="mono" style={{ color: "#f87171" }}>{fmt(blCalc.liability)}</span>
+                Responsabilidade: <span className="mono" style={{ color: "#f87171" }}>{fmtMoeda(blCalc.liabilityNative, bl.layMoeda)}</span>
+                {bl.layMoeda === "USD" && <span style={{ color: "#52525b" }}> ({fmt(blCalc.liabilityBRL)})</span>}
               </div>
               {bl.cashbackAtivo && (
                 <div style={{ marginTop: 6, fontSize: 11.5, color: "#71717a" }}>
@@ -453,10 +757,11 @@ export default function Calculadora() {
 
           {/* resultado */}
           <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
-            <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 14 }}>Resultado</h2>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultado (em reais)</h2>
+            <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Valores convertidos pela cotação atual pra dar pra comparar Back e Lay em moedas diferentes.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
               <Metric label="Aposta total" value={fmt(blCalc.apostaTotal)} />
-              <Metric label="Responsabilidade (lay)" value={fmt(blCalc.liability)} color="#f87171" />
+              <Metric label="Responsabilidade (lay)" value={fmt(blCalc.liabilityBRL)} color="#f87171" />
               <Metric
                 label="Lucro se SAIR (back ganha)"
                 value={fmt(blCalc.lucroSeSair)}
@@ -477,7 +782,7 @@ export default function Calculadora() {
       {/* header casas */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#71717a" }}>
-          <span>Stake total alvo (se nenhuma stake estiver travada):</span>
+          <span>Stake total alvo em R$ (se nenhuma stake estiver travada):</span>
           <input type="number" value={targetTotal} onChange={(e) => setTargetTotal(e.target.value)} className="input-field" style={{ width: 100 }} />
         </div>
         <button onClick={autoBalancear} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 500, background: "rgba(45,212,191,.12)", color: "#2dd4bf", border: "1px solid rgba(45,212,191,.3)" }}>
@@ -491,7 +796,10 @@ export default function Calculadora() {
           <div key={c.id} style={{ borderRadius: 10, border: `1px solid ${c.fixado ? "rgba(251,191,36,.4)" : "#27292e"}`, background: c.fixado ? "rgba(251,191,36,.03)" : "rgba(24,24,27,.4)", padding: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <span style={{ fontSize: 11.5, fontWeight: 500, color: "#2dd4bf" }}>Casa {idx + 1}</span>
-              {casas.length > 2 && <button onClick={() => removeCasa(c.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={14} /></button>}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <SeletorMoeda value={c.moeda} onChange={(m) => updateCasa(c.id, { moeda: m })} />
+                {casas.length > 2 && <button onClick={() => removeCasa(c.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={14} /></button>}
+              </div>
             </div>
 
             <input value={c.nome} onChange={(e) => updateCasa(c.id, { nome: e.target.value })} placeholder="nome da casa" className="input-field" style={{ marginBottom: 10, fontWeight: 600, color: "#f4f4f5" }} />
@@ -501,7 +809,7 @@ export default function Calculadora() {
             </div>
 
             <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
-              Entradas (odd + stake)
+              Entradas (odd + stake em {c.moeda === "USD" ? "US$" : "R$"})
             </label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
               {c.entradas.map((e) => (
@@ -531,8 +839,13 @@ export default function Calculadora() {
             </button>
 
             {c.entradas.length > 1 && (
-              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 8 }} className="mono">
-                Odd média: <span style={{ color: "#e4e4e7" }}>{totaisCasa(c).oddMedia.toFixed(4)}</span> · Stake total: <span style={{ color: "#e4e4e7" }}>{fmt(totaisCasa(c).totalStake)}</span>
+              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 4 }} className="mono">
+                Odd média: <span style={{ color: "#e4e4e7" }}>{totaisCasa(c).oddMedia.toFixed(4)}</span> · Stake total: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(totaisCasa(c).totalStake, c.moeda)}</span>
+              </div>
+            )}
+            {c.moeda === "USD" && (
+              <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 8 }} className="mono">
+                ≈ {fmt(totaisCasa(c).totalStake * usdToBrl)}
               </div>
             )}
 
@@ -542,7 +855,7 @@ export default function Calculadora() {
               </button>
             </div>
 
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
               <input type="checkbox" checked={c.cashback_ativo} onChange={(e) => updateCasa(c.id, { cashback_ativo: e.target.checked })} />
               Esta entrada gera cashback
             </label>
@@ -572,7 +885,8 @@ export default function Calculadora() {
 
       {/* resumo */}
       <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
-        <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 14 }}>Resultados</h2>
+        <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultados (em reais)</h2>
+        <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Cada casa mantém sua moeda de entrada; aqui tudo é convertido pra reais pra dar pra comparar.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 14, marginBottom: 18 }}>
           <Metric label="Stake Total" value={fmt(resultados.stakeTotal)} />
           <Metric label="Pior caso" value={fmt(resultados.pior)} color={resultados.pior >= 0 ? "#34d399" : "#fb7185"} />
@@ -602,7 +916,10 @@ export default function Calculadora() {
                     {l.oddMedia ? l.oddMedia.toFixed(l.numEntradas > 1 ? 4 : 2) : "-"}
                   </td>
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">{l.comissao}%</td>
-                  <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">{fmt(l.stake)}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">
+                    {fmtMoeda(l.stakeNative, l.moeda)}
+                    {l.moeda === "USD" && <div style={{ fontSize: 10, color: "#52525b" }}>≈ {fmt(l.stakeBRL)}</div>}
+                  </td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#c084fc" }} className="mono">{l.cashbackPct ? `${l.cashbackPct}%` : "-"}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: l.deficit >= 0 ? "#34d399" : "#fb7185" }} className="mono">{l.deficit >= 0 ? "+" : ""}{fmt(l.deficit)}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#38bdf8" }} className="mono">{l.seguro > 0 ? `+${fmt(l.seguro)}` : fmt(0)}</td>

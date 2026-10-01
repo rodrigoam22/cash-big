@@ -216,8 +216,10 @@ export default function Calculadora() {
       : stakeProfissionalBRL;
     const stakeNative = fator ? stakeBRL / fator : 0;
 
-    const lucroSeManter = p + stakeBRL * (odd - 1);
-    const lucroSeDuploGreen = a + p - stakeBRL;
+    const lucroSeManterLiquido = p + stakeBRL * (odd - 1);
+    const lucroSeDuploGreenLiquido = a + p - stakeBRL;
+    const lucroSeManterBruto = stakeBRL * (odd - 1);
+    const lucroSeDuploGreenBruto = a - stakeBRL;
 
     return {
       temDados, p, a,
@@ -225,7 +227,8 @@ export default function Calculadora() {
       stakeConservadoraNative: fator ? stakeConservadoraBRL / fator : 0,
       stakeProfissionalNative: fator ? stakeProfissionalBRL / fator : 0,
       stakeAgressivaNative: fator ? stakeAgressivaBRL / fator : 0,
-      lucroSeManter, lucroSeDuploGreen,
+      lucroSeManter: lucroSeManterLiquido, lucroSeDuploGreen: lucroSeDuploGreenLiquido,
+      lucroSeManterLiquido, lucroSeDuploGreenLiquido, lucroSeManterBruto, lucroSeDuploGreenBruto,
     };
   }, [dg, usdToBrl]);
 
@@ -719,8 +722,8 @@ export default function Calculadora() {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
-                  <Metric label="Lucro se manter a vitória (PA)" value={fmtR(dgCalc.lucroSeManter)} color={dgCalc.lucroSeManter >= 0 ? "#34d399" : "#fb7185"} />
-                  <Metric label="Lucro se sair Duplo Green" value={fmtR(dgCalc.lucroSeDuploGreen)} color={dgCalc.lucroSeDuploGreen >= 0 ? "#34d399" : "#fb7185"} />
+                  <Metric label="Lucro líquido se manter a vitória (PA)" value={fmtR(dgCalc.lucroSeManter)} sub={`bruto (sem a operação): ${fmtR(dgCalc.lucroSeManterBruto)}`} color={dgCalc.lucroSeManter >= 0 ? "#34d399" : "#fb7185"} />
+                  <Metric label="Lucro líquido se sair Duplo Green" value={fmtR(dgCalc.lucroSeDuploGreen)} sub={`bruto (sem a operação): ${fmtR(dgCalc.lucroSeDuploGreenBruto)}`} color={dgCalc.lucroSeDuploGreen >= 0 ? "#34d399" : "#fb7185"} />
                 </div>
                 {Math.abs(dgCalc.lucroSeManter - dgCalc.lucroSeDuploGreen) < 0.5 && (
                   <div style={{ marginTop: 10, fontSize: 11.5, color: "#34d399", textAlign: "center" }}>Lucro igual nos dois cenários ✓</div>

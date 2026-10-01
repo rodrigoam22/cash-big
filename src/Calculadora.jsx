@@ -153,11 +153,14 @@ export default function Calculadora() {
   // ---------- modo Back + Dupla Chance ----------
   const [bdc, setBdc] = useState({
     backOdd: "", backComissao: "0", backStake: "100", backMoeda: "BRL", freebet: false,
-    dcOdd: "", dcComissao: "0", dcStake: "", dcMoeda: "BRL", dcManual: false,
+    dcOdd: "", dcComissao: "0", dcMoeda: "BRL", dcEntradas: [],
     cashbackAtivo: false, cashbackPct: "20", conversaoPct: "100", teto: "",
     dcCashbackAtivo: false, dcCashbackPct: "20", dcConversaoPct: "100", dcTeto: "",
   });
   const updateBdc = (patch) => setBdc((prev) => ({ ...prev, ...patch }));
+  const addDcEntrada = () => setBdc((prev) => ({ ...prev, dcEntradas: [...prev.dcEntradas, novaEntrada()] }));
+  const removeDcEntrada = (id) => setBdc((prev) => ({ ...prev, dcEntradas: prev.dcEntradas.filter((e) => e.id !== id) }));
+  const updateDcEntrada = (id, patch) => setBdc((prev) => ({ ...prev, dcEntradas: prev.dcEntradas.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
 
   const bdcCalc = useMemo(() => {
     const backFator = bdc.backMoeda === "USD" ? usdToBrl : 1;
@@ -167,25 +170,35 @@ export default function Calculadora() {
     const backComissao = Number(bdc.backComissao || 0);
     const backStakeNative = Number(bdc.backStake || 0);
     const backStakeBRL = backStakeNative * backFator;
-    const dcOdd = Number(bdc.dcOdd || 0);
+    const dcOddAlvo = Number(bdc.dcOdd || 0); // odd ofertada, usada só pra calcular a sugestão
     const dcComissao = Number(bdc.dcComissao || 0);
 
     const mBack = bdc.freebet
       ? (backOdd - 1) * (1 - backComissao / 100)
       : 1 + (backOdd - 1) * (1 - backComissao / 100);
-    const mDC = 1 + (dcOdd - 1) * (1 - dcComissao / 100);
+    const mDCAlvo = 1 + (dcOddAlvo - 1) * (1 - dcComissao / 100);
 
     const cBack = bdc.cashbackAtivo ? (Number(bdc.cashbackPct || 0) / 100) * (Number(bdc.conversaoPct || 0) / 100) : 0;
     const cDC = bdc.dcCashbackAtivo ? (Number(bdc.dcCashbackPct || 0) / 100) * (Number(bdc.dcConversaoPct || 0) / 100) : 0;
 
     const kBack = mBack - cBack;
-    const kDC = mDC - cDC;
+    const kDCAlvo = mDCAlvo - cDC;
 
-    const dcStakeAutoBRL = kDC > 0 ? (backStakeBRL * kBack) / kDC : 0;
+    const dcStakeAutoBRL = kDCAlvo > 0 ? (backStakeBRL * kBack) / kDCAlvo : 0;
     const dcStakeAutoNative = dcFator ? dcStakeAutoBRL / dcFator : 0;
 
-    const dcStakeNative = bdc.dcManual ? Number(bdc.dcStake || 0) : dcStakeAutoNative;
+    // odd média real dos preenchimentos (fills) já conseguidos
+    const totalPreenchidoNative = bdc.dcEntradas.reduce((acc, e) => acc + Number(e.stake || 0), 0);
+    const somaPonderada = bdc.dcEntradas.reduce((acc, e) => acc + Number(e.stake || 0) * Number(e.odd || 0), 0);
+    const temPreenchimento = totalPreenchidoNative > 0;
+    const dcOddMedia = temPreenchimento ? somaPonderada / totalPreenchidoNative : dcOddAlvo;
+
+    const dcStakeNative = temPreenchimento ? totalPreenchidoNative : dcStakeAutoNative;
+    const dcOddUsada = temPreenchimento ? dcOddMedia : dcOddAlvo;
+    const mDCUsada = 1 + (dcOddUsada - 1) * (1 - dcComissao / 100);
     const dcStakeBRL = dcStakeNative * dcFator;
+
+    const faltandoAtribuirNative = Math.max(0, dcStakeAutoNative - totalPreenchidoNative);
 
     const stakeTotal = (bdc.freebet ? 0 : backStakeBRL) + dcStakeBRL;
 
@@ -195,12 +208,15 @@ export default function Calculadora() {
     const cashbackDCValor = Math.min(dcStakeBRL * cDC, dcCashbackTeto);
 
     const payoutBack = backStakeBRL * mBack;
-    const payoutDC = dcStakeBRL * mDC;
+    const payoutDC = dcStakeBRL * mDCUsada;
 
     const lucroSeBackGanha = payoutBack - stakeTotal + cashbackDCValor;
     const lucroSeDCGanha = payoutDC - stakeTotal + cashbackBackValor;
 
-    return { dcStakeAutoNative, dcStakeBRL, stakeTotal, lucroSeBackGanha, lucroSeDCGanha, cashbackBackValor, cashbackDCValor };
+    return {
+      dcStakeAutoNative, dcStakeBRL, stakeTotal, lucroSeBackGanha, lucroSeDCGanha, cashbackBackValor, cashbackDCValor,
+      dcOddMedia, temPreenchimento, totalPreenchidoNative, faltandoAtribuirNative,
+    };
   }, [bdc, usdToBrl]);
 
   // ---------- modo Proteção Duplo Green (2UP) ----------
@@ -339,9 +355,8 @@ export default function Calculadora() {
           teto: bdc.teto === "" ? null : bdc.teto,
           dc_odd: bdc.dcOdd === "" ? null : bdc.dcOdd,
           dc_comissao: bdc.dcComissao === "" ? null : bdc.dcComissao,
-          dc_stake: bdc.dcManual ? (bdc.dcStake === "" ? null : bdc.dcStake) : null,
+          dc_entradas: bdc.dcEntradas.map((e) => ({ odd: e.odd, stake: e.stake })),
           dc_moeda: bdc.dcMoeda,
-          dc_manual: bdc.dcManual,
           dc_cashback_ativo: bdc.dcCashbackAtivo,
           dc_cashback_pct: bdc.dcCashbackPct === "" ? null : bdc.dcCashbackPct,
           dc_conversao_pct: bdc.dcConversaoPct === "" ? null : bdc.dcConversaoPct,
@@ -439,9 +454,10 @@ export default function Calculadora() {
         freebet: !!calc.freebet,
         dcOdd: calc.dc_odd ?? "",
         dcComissao: calc.dc_comissao ?? "0",
-        dcStake: calc.dc_stake ?? "",
+        dcEntradas: Array.isArray(calc.dc_entradas)
+          ? calc.dc_entradas.map((e) => ({ id: uid(), odd: e.odd ?? "", stake: e.stake ?? "" }))
+          : [],
         dcMoeda: calc.dc_moeda ?? "BRL",
-        dcManual: !!calc.dc_manual,
         cashbackAtivo: !!calc.cashback_ativo,
         cashbackPct: calc.cashback_pct ?? "20",
         conversaoPct: calc.conversao_pct ?? "100",
@@ -802,29 +818,51 @@ export default function Calculadora() {
                 <SeletorMoeda value={bdc.dcMoeda} onChange={(m) => updateBdc({ dcMoeda: m })} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                <Campo label="Odd"><input type="number" step="0.01" value={bdc.dcOdd} onChange={(e) => updateBdc({ dcOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
+                <Campo label="Odd ofertada (alvo)"><input type="number" step="0.01" value={bdc.dcOdd} onChange={(e) => updateBdc({ dcOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bdc.dcComissao} onChange={(e) => updateBdc({ dcComissao: e.target.value })} className="input-field" /></Campo>
               </div>
-              <Campo label={`Stake (${bdc.dcMoeda === "USD" ? "US$" : "R$"})`}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    type="number" step="0.01"
-                    value={bdc.dcManual ? bdc.dcStake : bdcCalc.dcStakeAutoNative.toFixed(2)}
-                    onChange={(e) => updateBdc({ dcManual: true, dcStake: e.target.value })}
-                    className="input-field"
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    onClick={() => updateBdc({ dcManual: false, dcStake: "" })}
-                    title="recalcular automaticamente"
-                    style={{ padding: 7, borderRadius: 6, border: "1px solid #27292e", background: bdc.dcManual ? "none" : "rgba(251,191,36,.12)", color: bdc.dcManual ? "#71717a" : "#fbbf24" }}
-                  >
-                    <RefreshCw size={12} />
-                  </button>
+
+              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 6 }}>
+                Sugestão de stake total: <span className="mono" style={{ color: "#fbbf24" }}>{fmtMoeda(bdcCalc.dcStakeAutoNative, bdc.dcMoeda)}</span>
+              </div>
+
+              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
+                Preenchimentos reais (odd + stake, caso não feche tudo de uma vez)
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
+                {bdc.dcEntradas.map((e) => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input type="number" step="0.01" value={e.odd} onChange={(ev) => updateDcEntrada(e.id, { odd: ev.target.value })} placeholder="odd" className="input-field" style={{ width: 70 }} />
+                    <input type="number" step="0.01" value={e.stake} onChange={(ev) => updateDcEntrada(e.id, { stake: ev.target.value })} placeholder="stake" className="input-field" style={{ flex: 1 }} />
+                    <button onClick={() => removeDcEntrada(e.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={13} /></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addDcEntrada} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#f87171", background: "none", border: "1px dashed rgba(248,113,113,.4)", borderRadius: 6, padding: "4px 8px", marginBottom: 8 }}>
+                <Plus size={11} /> adicionar preenchimento
+              </button>
+
+              {bdcCalc.temPreenchimento ? (
+                <div style={{ fontSize: 11, color: "#71717a", marginBottom: 8 }} className="mono">
+                  Odd média conseguida: <span style={{ color: "#e4e4e7" }}>{bdcCalc.dcOddMedia.toFixed(4)}</span> · Preenchido: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(bdcCalc.totalPreenchidoNative, bdc.dcMoeda)}</span>
+                  {bdcCalc.faltandoAtribuirNative > 0.01 && (
+                    <div style={{ color: "#fbbf24", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span>Faltam atribuir ≈ {fmtMoeda(bdcCalc.faltandoAtribuirNative, bdc.dcMoeda)}</span>
+                      <button
+                        onClick={() => setBdc((prev) => ({ ...prev, dcEntradas: [...prev.dcEntradas, { id: uid(), odd: prev.dcOdd, stake: bdcCalc.faltandoAtribuirNative.toFixed(2) }] }))}
+                        style={{ fontSize: 10, color: "#fbbf24", background: "none", border: "1px dashed rgba(251,191,36,.4)", borderRadius: 6, padding: "2px 6px" }}
+                      >
+                        completar com odd alvo
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </Campo>
+              ) : (
+                <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 8 }}>Sem preenchimentos ainda — usando a sugestão automática acima para o cálculo.</div>
+              )}
+
               {bdc.cashbackAtivo && (
-                <div style={{ marginTop: 10, fontSize: 11.5, color: "#71717a" }}>
+                <div style={{ marginTop: 4, fontSize: 11.5, color: "#71717a" }}>
                   Cashback estimado (se o Back perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(bdcCalc.cashbackBackValor)}</span>
                 </div>
               )}

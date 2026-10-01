@@ -18,6 +18,7 @@ const novaCasa = (nome = "") => ({
   comissao: "0",
   moeda: "BRL",
   fixado: false,
+  freebet: false,
   cashback_ativo: false,
   cashback_pct: "20",
   conversao_pct: "100",
@@ -134,7 +135,7 @@ export default function Calculadora() {
 
   // ---------- modo Back + Dupla Chance ----------
   const [bdc, setBdc] = useState({
-    backOdd: "", backComissao: "0", backStake: "100", backMoeda: "BRL",
+    backOdd: "", backComissao: "0", backStake: "100", backMoeda: "BRL", freebet: false,
     dcOdd: "", dcComissao: "0", dcStake: "", dcMoeda: "BRL", dcManual: false,
     cashbackAtivo: false, cashbackPct: "20", conversaoPct: "100", teto: "",
     dcCashbackAtivo: false, dcCashbackPct: "20", dcConversaoPct: "100", dcTeto: "",
@@ -152,7 +153,9 @@ export default function Calculadora() {
     const dcOdd = Number(bdc.dcOdd || 0);
     const dcComissao = Number(bdc.dcComissao || 0);
 
-    const mBack = 1 + (backOdd - 1) * (1 - backComissao / 100);
+    const mBack = bdc.freebet
+      ? (backOdd - 1) * (1 - backComissao / 100)
+      : 1 + (backOdd - 1) * (1 - backComissao / 100);
     const mDC = 1 + (dcOdd - 1) * (1 - dcComissao / 100);
 
     const cBack = bdc.cashbackAtivo ? (Number(bdc.cashbackPct || 0) / 100) * (Number(bdc.conversaoPct || 0) / 100) : 0;
@@ -167,7 +170,7 @@ export default function Calculadora() {
     const dcStakeNative = bdc.dcManual ? Number(bdc.dcStake || 0) : dcStakeAutoNative;
     const dcStakeBRL = dcStakeNative * dcFator;
 
-    const stakeTotal = backStakeBRL + dcStakeBRL;
+    const stakeTotal = (bdc.freebet ? 0 : backStakeBRL) + dcStakeBRL;
 
     const cashbackTeto = bdc.teto === "" ? Infinity : Number(bdc.teto);
     const cashbackBackValor = Math.min(backStakeBRL * cBack, cashbackTeto);
@@ -313,6 +316,7 @@ export default function Calculadora() {
           back_comissao: bdc.backComissao === "" ? null : bdc.backComissao,
           back_stake: bdc.backStake === "" ? null : bdc.backStake,
           back_moeda: bdc.backMoeda,
+          freebet: bdc.freebet,
           cashback_ativo: bdc.cashbackAtivo,
           cashback_pct: bdc.cashbackPct === "" ? null : bdc.cashbackPct,
           conversao_pct: bdc.conversaoPct === "" ? null : bdc.conversaoPct,
@@ -361,6 +365,7 @@ export default function Calculadora() {
           stake: totalStake || null,
           moeda: c.moeda,
           fixado: c.fixado,
+          freebet: c.freebet,
           cashback_ativo: c.cashback_ativo,
           cashback_pct: c.cashback_pct === "" ? null : c.cashback_pct,
           conversao_pct: c.conversao_pct === "" ? null : c.conversao_pct,
@@ -414,6 +419,7 @@ export default function Calculadora() {
         backComissao: calc.back_comissao ?? "0",
         backStake: calc.back_stake ?? "",
         backMoeda: calc.back_moeda ?? "BRL",
+        freebet: !!calc.freebet,
         dcOdd: calc.dc_odd ?? "",
         dcComissao: calc.dc_comissao ?? "0",
         dcStake: calc.dc_stake ?? "",
@@ -450,6 +456,7 @@ export default function Calculadora() {
           comissao: c.comissao ?? "0",
           moeda: c.moeda ?? "BRL",
           fixado: c.fixado,
+          freebet: !!c.freebet,
           cashback_ativo: c.cashback_ativo,
           cashback_pct: c.cashback_pct ?? "20",
           conversao_pct: c.conversao_pct ?? "100",
@@ -475,10 +482,13 @@ export default function Calculadora() {
   const calc = useMemo(() => {
     const totais = casas.map((c) => totaisCasa(c));
     const totaisBRL = casas.map((c, i) => totais[i].totalStake * (c.moeda === "USD" ? usdToBrl : 1));
-    const m = casas.map((c, i) => 1 + (totais[i].oddMedia - 1) * (1 - Number(c.comissao || 0) / 100));
+    const dinheiroRealBRL = casas.map((c, i) => (c.freebet ? 0 : totaisBRL[i]));
+    const m = casas.map((c, i) => c.freebet
+      ? (totais[i].oddMedia - 1) * (1 - Number(c.comissao || 0) / 100)
+      : 1 + (totais[i].oddMedia - 1) * (1 - Number(c.comissao || 0) / 100));
     const cRate = casas.map((c) => (c.cashback_ativo ? (Number(c.cashback_pct || 0) / 100) * (Number(c.conversao_pct || 0) / 100) : 0));
     const k = casas.map((_, i) => m[i] - cRate[i]);
-    return { m, cRate, k, totais, totaisBRL };
+    return { m, cRate, k, totais, totaisBRL, dinheiroRealBRL };
   }, [casas, usdToBrl]);
 
   const autoBalancear = () => {
@@ -508,7 +518,8 @@ export default function Calculadora() {
 
   const resultados = useMemo(() => {
     const stakesBRL = calc.totaisBRL;
-    const stakeTotal = stakesBRL.reduce((a, b) => a + b, 0);
+    const dinheiroReal = calc.dinheiroRealBRL;
+    const stakeTotal = dinheiroReal.reduce((a, b) => a + b, 0);
     const { m, totais } = calc;
     const cashbackValor = casas.map((c, i) => {
       if (!c.cashback_ativo) return 0;
@@ -527,7 +538,7 @@ export default function Calculadora() {
       return {
         id: c.id, nome: c.nome, oddMedia: totais[i].oddMedia, numEntradas: c.entradas.length,
         comissao: c.comissao, stakeNative: totais[i].totalStake, moeda: c.moeda, stakeBRL: stakesBRL[i],
-        cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi,
+        freebet: c.freebet, cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi,
       };
     });
     const lucros = linhas.map((l) => l.lucro);
@@ -747,7 +758,12 @@ export default function Calculadora() {
               </div>
               <Campo label={`Stake (${bdc.backMoeda === "USD" ? "US$" : "R$"})`}><input type="number" step="0.01" value={bdc.backStake} onChange={(e) => updateBdc({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={bdc.freebet} onChange={(e) => updateBdc({ freebet: e.target.checked })} />
+                Essa é uma aposta grátis (freebet) — stake não é devolvida
+              </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
                 <input type="checkbox" checked={bdc.cashbackAtivo} onChange={(e) => updateBdc({ cashbackAtivo: e.target.checked })} />
                 O Back gera cashback se perder
               </label>
@@ -1029,6 +1045,11 @@ export default function Calculadora() {
             </div>
 
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <input type="checkbox" checked={c.freebet} onChange={(e) => updateCasa(c.id, { freebet: e.target.checked })} />
+              Essa é uma aposta grátis (freebet) — stake não é devolvida
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
               <input type="checkbox" checked={c.cashback_ativo} onChange={(e) => updateCasa(c.id, { cashback_ativo: e.target.checked })} />
               Esta entrada gera cashback
             </label>

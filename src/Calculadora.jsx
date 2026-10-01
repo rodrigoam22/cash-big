@@ -86,12 +86,16 @@ export default function Calculadora() {
   // ---------- modo Back x Lay ----------
   const [bl, setBl] = useState({
     backOdd: "", backComissao: "0", backStake: "100", backMoeda: "BRL",
-    layOdd: "", layComissao: "2.8", layStake: "", layMoeda: "BRL",
-    freebet: false, layManual: false,
+    layOdd: "", layComissao: "2.8", layMoeda: "BRL",
+    layEntradas: [],
+    freebet: false,
     cashbackAtivo: false, cashbackPct: "20", conversaoPct: "100", teto: "",
     layCashbackAtivo: false, layCashbackPct: "15", layConversaoPct: "100", layTeto: "",
   });
   const updateBl = (patch) => setBl((prev) => ({ ...prev, ...patch }));
+  const addLayEntrada = () => setBl((prev) => ({ ...prev, layEntradas: [...prev.layEntradas, novaEntrada()] }));
+  const removeLayEntrada = (id) => setBl((prev) => ({ ...prev, layEntradas: prev.layEntradas.filter((e) => e.id !== id) }));
+  const updateLayEntrada = (id, patch) => setBl((prev) => ({ ...prev, layEntradas: prev.layEntradas.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
 
   const blCalc = useMemo(() => {
     const backFator = bl.backMoeda === "USD" ? usdToBrl : 1;
@@ -101,7 +105,7 @@ export default function Calculadora() {
     const backComissao = Number(bl.backComissao || 0);
     const backStakeNative = Number(bl.backStake || 0);
     const backStakeBRL = backStakeNative * backFator;
-    const layOdd = Number(bl.layOdd || 0);
+    const layOddAlvo = Number(bl.layOdd || 0); // odd ofertada, usada só pra calcular a sugestão
     const layComissao = Number(bl.layComissao || 0);
 
     const mBack = bl.freebet
@@ -114,23 +118,36 @@ export default function Calculadora() {
 
     const layCashbackRate = bl.layCashbackAtivo ? (Number(bl.layCashbackPct || 0) / 100) * (Number(bl.layConversaoPct || 0) / 100) : 0;
 
-    const divisor = layOdd - layComissao / 100 - layCashbackRate;
+    const divisor = layOddAlvo - layComissao / 100 - layCashbackRate;
     const layStakeAutoBRL = divisor > 0 ? (backStakeBRL * mBack - cashbackRaw) / divisor : 0;
     const layStakeAutoNative = layFator ? layStakeAutoBRL / layFator : 0;
 
-    const layStakeNative = bl.layManual ? Number(bl.layStake || 0) : layStakeAutoNative;
+    // odd média real dos preenchimentos (fills) já conseguidos no exchange
+    const totalPreenchidoNative = bl.layEntradas.reduce((acc, e) => acc + Number(e.stake || 0), 0);
+    const somaPonderada = bl.layEntradas.reduce((acc, e) => acc + Number(e.stake || 0) * Number(e.odd || 0), 0);
+    const temPreenchimento = totalPreenchidoNative > 0;
+    const layOddMedia = temPreenchimento ? somaPonderada / totalPreenchidoNative : layOddAlvo;
+
+    // usa os preenchimentos reais se existirem; senão, cai na sugestão automática
+    const layStakeNative = temPreenchimento ? totalPreenchidoNative : layStakeAutoNative;
+    const layOddUsada = temPreenchimento ? layOddMedia : layOddAlvo;
     const layStakeBRL = layStakeNative * layFator;
+
+    const faltandoAtribuirNative = Math.max(0, layStakeAutoNative - totalPreenchidoNative);
 
     const layCashbackTeto = bl.layTeto === "" ? Infinity : Number(bl.layTeto);
     const layCashbackValor = Math.min(layStakeBRL * layCashbackRate, layCashbackTeto);
 
-    const liabilityBRL = layStakeBRL * (layOdd - 1);
+    const liabilityBRL = layStakeBRL * (layOddUsada - 1);
     const lucroSeSair = backStakeBRL * (backOdd - 1) * (1 - backComissao / 100) - liabilityBRL + layCashbackValor;
     const lucroSeNaoSair = layStakeBRL * (1 - layComissao / 100) - (bl.freebet ? 0 : backStakeBRL) + cashbackValor;
     const apostaTotal = backStakeBRL + liabilityBRL;
     const liabilityNative = layFator ? liabilityBRL / layFator : 0;
 
-    return { layStakeAutoNative, layStakeBRL, liabilityBRL, liabilityNative, lucroSeSair, lucroSeNaoSair, apostaTotal, cashbackValor, layCashbackValor };
+    return {
+      layStakeAutoNative, layStakeBRL, liabilityBRL, liabilityNative, lucroSeSair, lucroSeNaoSair, apostaTotal, cashbackValor, layCashbackValor,
+      layOddMedia, temPreenchimento, totalPreenchidoNative, faltandoAtribuirNative,
+    };
   }, [bl, usdToBrl]);
 
   // ---------- modo Back + Dupla Chance ----------
@@ -296,8 +313,7 @@ export default function Calculadora() {
           back_moeda: bl.backMoeda,
           lay_odd: bl.layOdd === "" ? null : bl.layOdd,
           lay_comissao: bl.layComissao === "" ? null : bl.layComissao,
-          lay_stake: bl.layManual ? (bl.layStake === "" ? null : bl.layStake) : null,
-          lay_manual: bl.layManual,
+          lay_entradas: bl.layEntradas.map((e) => ({ odd: e.odd, stake: e.stake })),
           lay_moeda: bl.layMoeda,
           freebet: bl.freebet,
           cashback_ativo: bl.cashbackAtivo,
@@ -399,10 +415,11 @@ export default function Calculadora() {
         backMoeda: calc.back_moeda ?? "BRL",
         layOdd: calc.lay_odd ?? "",
         layComissao: calc.lay_comissao ?? "2.8",
-        layStake: calc.lay_stake ?? "",
+        layEntradas: Array.isArray(calc.lay_entradas)
+          ? calc.lay_entradas.map((e) => ({ id: uid(), odd: e.odd ?? "", stake: e.stake ?? "" }))
+          : [],
         layMoeda: calc.lay_moeda ?? "BRL",
         freebet: !!calc.freebet,
-        layManual: !!calc.lay_manual,
         cashbackAtivo: !!calc.cashback_ativo,
         cashbackPct: calc.cashback_pct ?? "20",
         conversaoPct: calc.conversao_pct ?? "100",
@@ -893,28 +910,50 @@ export default function Calculadora() {
                 <SeletorMoeda value={bl.layMoeda} onChange={(m) => updateBl({ layMoeda: m })} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                <Campo label="Odd"><input type="number" step="0.01" value={bl.layOdd} onChange={(e) => updateBl({ layOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
+                <Campo label="Odd ofertada (alvo)"><input type="number" step="0.01" value={bl.layOdd} onChange={(e) => updateBl({ layOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.layComissao} onChange={(e) => updateBl({ layComissao: e.target.value })} className="input-field" /></Campo>
               </div>
-              <Campo label={`Stake (lay, ${bl.layMoeda === "USD" ? "US$" : "R$"})`}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    type="number" step="0.01"
-                    value={bl.layManual ? bl.layStake : blCalc.layStakeAutoNative.toFixed(2)}
-                    onChange={(e) => updateBl({ layManual: true, layStake: e.target.value })}
-                    className="input-field"
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    onClick={() => updateBl({ layManual: false, layStake: "" })}
-                    title="recalcular automaticamente"
-                    style={{ padding: 7, borderRadius: 6, border: "1px solid #27292e", background: bl.layManual ? "none" : "rgba(251,191,36,.12)", color: bl.layManual ? "#71717a" : "#fbbf24" }}
-                  >
-                    <RefreshCw size={12} />
-                  </button>
+
+              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 6 }}>
+                Sugestão de stake total: <span className="mono" style={{ color: "#fbbf24" }}>{fmtMoeda(blCalc.layStakeAutoNative, bl.layMoeda)}</span>
+              </div>
+
+              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
+                Preenchimentos reais (odd + stake, caso não feche tudo de uma vez)
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
+                {bl.layEntradas.map((e) => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input type="number" step="0.01" value={e.odd} onChange={(ev) => updateLayEntrada(e.id, { odd: ev.target.value })} placeholder="odd" className="input-field" style={{ width: 70 }} />
+                    <input type="number" step="0.01" value={e.stake} onChange={(ev) => updateLayEntrada(e.id, { stake: ev.target.value })} placeholder="stake" className="input-field" style={{ flex: 1 }} />
+                    <button onClick={() => removeLayEntrada(e.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={13} /></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addLayEntrada} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#f87171", background: "none", border: "1px dashed rgba(248,113,113,.4)", borderRadius: 6, padding: "4px 8px", marginBottom: 8 }}>
+                <Plus size={11} /> adicionar preenchimento
+              </button>
+
+              {blCalc.temPreenchimento ? (
+                <div style={{ fontSize: 11, color: "#71717a", marginBottom: 8 }} className="mono">
+                  Odd média conseguida: <span style={{ color: "#e4e4e7" }}>{blCalc.layOddMedia.toFixed(4)}</span> · Preenchido: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(blCalc.totalPreenchidoNative, bl.layMoeda)}</span>
+                  {blCalc.faltandoAtribuirNative > 0.01 && (
+                    <div style={{ color: "#fbbf24", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span>Faltam atribuir ≈ {fmtMoeda(blCalc.faltandoAtribuirNative, bl.layMoeda)}</span>
+                      <button
+                        onClick={() => setBl((prev) => ({ ...prev, layEntradas: [...prev.layEntradas, { id: uid(), odd: prev.layOdd, stake: blCalc.faltandoAtribuirNative.toFixed(2) }] }))}
+                        style={{ fontSize: 10, color: "#fbbf24", background: "none", border: "1px dashed rgba(251,191,36,.4)", borderRadius: 6, padding: "2px 6px" }}
+                      >
+                        completar com odd alvo
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </Campo>
-              <div style={{ marginTop: 10, fontSize: 11.5, color: "#71717a" }}>
+              ) : (
+                <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 8 }}>Sem preenchimentos ainda — usando a sugestão automática acima para o cálculo.</div>
+              )}
+
+              <div style={{ marginTop: 4, fontSize: 11.5, color: "#71717a" }}>
                 Responsabilidade: <span className="mono" style={{ color: "#f87171" }}>{fmtMoeda(blCalc.liabilityNative, bl.layMoeda)}</span>
                 {bl.layMoeda === "USD" && <span style={{ color: "#52525b" }}> ({fmt(blCalc.liabilityBRL)})</span>}
               </div>

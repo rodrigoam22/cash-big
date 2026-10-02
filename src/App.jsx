@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./supabase";
 import Calculadora from "./Calculadora";
+import Operacoes from "./Operacoes";
 import { LogOut, DollarSign } from "lucide-react";
 
 // ================= LOGIN =================
@@ -63,6 +64,8 @@ export default function App() {
 
 // ================= DASHBOARD =================
 function Dashboard() {
+  const [pagina, setPagina] = useState("calculadora"); // "calculadora" | "operacoes"
+
   return (
     <div style={{ minHeight: "100vh" }}>
       <header style={{ borderBottom: "1px solid rgba(39,41,46,.8)", position: "sticky", top: 0, background: "rgba(11,13,16,.95)", backdropFilter: "blur(6px)", zIndex: 20 }}>
@@ -76,7 +79,17 @@ function Dashboard() {
               <p style={{ fontSize: 11, color: "#71717a", margin: 0 }} className="mono">calculadora de dutching &amp; cashback</p>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", rowGap: 8 }}>
+            <div style={{ display: "flex", gap: 4, background: "#18181b", border: "1px solid #27292e", borderRadius: 999, padding: 3 }}>
+              <button
+                onClick={() => setPagina("calculadora")}
+                style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: pagina === "calculadora" ? "#fbbf24" : "transparent", color: pagina === "calculadora" ? "#0b0d10" : "#a1a1aa" }}
+              >Calculadora</button>
+              <button
+                onClick={() => setPagina("operacoes")}
+                style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: pagina === "operacoes" ? "#fbbf24" : "transparent", color: pagina === "operacoes" ? "#0b0d10" : "#a1a1aa" }}
+              >Operações</button>
+            </div>
             <button onClick={() => supabase.auth.signOut()} title="Sair" style={{ background: "none", border: "none", color: "#52525b" }}>
               <LogOut size={16} />
             </button>
@@ -86,7 +99,7 @@ function Dashboard() {
       </header>
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 20px" }}>
-        <Calculadora />
+        {pagina === "operacoes" ? <Operacoes /> : <Calculadora />}
       </div>
     </div>
   );

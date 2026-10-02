@@ -17,7 +17,7 @@ export default function Operacoes() {
   const [operacoes, setOperacoes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
-  const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada" }); // modo: "finalizada" | "pendente"
+  const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL" }); // modo: "finalizada" | "pendente"
   const [resolvendoId, setResolvendoId] = useState(null);
   const [lucroManual, setLucroManual] = useState("");
   const [verificando, setVerificando] = useState(null);
@@ -93,7 +93,9 @@ export default function Operacoes() {
   }, [operacoes, ano, mes]);
 
   const adicionar = async () => {
-    const stake = novo.apostado === "" ? 0 : Number(novo.apostado);
+    const fator = novo.moeda === "USD" ? usdToBrl : 1;
+    const stakeNative = novo.apostado === "" ? 0 : Number(novo.apostado);
+    const stake = stakeNative * fator;
     const payload = novo.modo === "pendente"
       ? {
           data: novo.data,
@@ -112,12 +114,12 @@ export default function Operacoes() {
           descricao: novo.descricao || null,
           tipo: "manual",
           apostado: stake,
-          lucro: novo.lucro === "" ? 0 : Number(novo.lucro),
+          lucro: (novo.lucro === "" ? 0 : Number(novo.lucro)) * fator,
           status: "finalizado",
         };
     const { error } = await supabase.from("operacoes").insert(payload);
     if (!error) {
-      setNovo({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada" });
+      setNovo({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL" });
       setMostrarForm(false);
       carregar();
     }
@@ -134,7 +136,18 @@ export default function Operacoes() {
   const [coberturaAtiva, setCoberturaAtiva] = useState(false);
   const [coberturaOdd, setCoberturaOdd] = useState("");
   const [coberturaStake, setCoberturaStake] = useState("");
+  const [coberturaMoeda, setCoberturaMoeda] = useState("BRL");
   const [coberturaResultado, setCoberturaResultado] = useState("ganhou"); // "ganhou" | "perdeu"
+
+  const SeletorMoedaMini = ({ value, onChange }) => (
+    <div style={{ display: "flex", gap: 2, background: "#18181b", border: "1px solid #27292e", borderRadius: 6, padding: 2 }}>
+      {["BRL", "USD"].map((m) => (
+        <button key={m} onClick={() => onChange(m)} type="button" style={{ padding: "6px 8px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: value === m ? "#fbbf24" : "transparent", color: value === m ? "#0b0d10" : "#71717a" }}>
+          {m === "BRL" ? "R$" : "US$"}
+        </button>
+      ))}
+    </div>
+  );
   const [editandoCoberturaId, setEditandoCoberturaId] = useState(null);
   const [editandoNomeId, setEditandoNomeId] = useState(null);
   const [novoNome, setNovoNome] = useState("");
@@ -153,8 +166,9 @@ export default function Operacoes() {
     carregar();
   };
 
-  const lucroCobertura = (odd, stake, resultado) => {
-    const o = Number(odd || 0), s = Number(stake || 0);
+  const lucroCobertura = (odd, stake, resultado, moeda = "BRL") => {
+    const o = Number(odd || 0);
+    const s = Number(stake || 0) * (moeda === "USD" ? usdToBrl : 1);
     if (resultado === "perdeu") return -s;
     return o > 1 ? s * (o - 1) : 0;
   };
@@ -168,6 +182,7 @@ export default function Operacoes() {
     setCoberturaAtiva(op.cobertura_odd != null);
     setCoberturaOdd(op.cobertura_odd ?? "");
     setCoberturaStake(op.cobertura_stake ?? "");
+    setCoberturaMoeda(op.cobertura_moeda ?? "BRL");
     setCoberturaResultado(op.cobertura_resultado ?? "ganhou");
   };
 
@@ -180,7 +195,12 @@ export default function Operacoes() {
       {coberturaAtiva && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: 10, background: "rgba(251,191,36,.02)" }}>
           <Campo label="Odd da reaposta"><input type="number" step="0.01" value={coberturaOdd} onChange={(e) => setCoberturaOdd(e.target.value)} placeholder="ex: 1.25" className="input-field" /></Campo>
-          <Campo label="Valor apostado (R$)"><input type="number" step="0.01" value={coberturaStake} onChange={(e) => setCoberturaStake(e.target.value)} placeholder="0,00" className="input-field" /></Campo>
+          <Campo label="Valor apostado">
+            <div style={{ display: "flex", gap: 6 }}>
+              <input type="number" step="0.01" value={coberturaStake} onChange={(e) => setCoberturaStake(e.target.value)} placeholder="0,00" className="input-field" style={{ flex: 1 }} />
+              <SeletorMoedaMini value={coberturaMoeda} onChange={setCoberturaMoeda} />
+            </div>
+          </Campo>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
               Essa reaposta, sozinha, ganhou ou perdeu?
@@ -192,7 +212,7 @@ export default function Operacoes() {
             <div style={{ fontSize: 10.5, color: "#52525b", marginTop: 4 }}>Se você reapostou no time contrário ao que já tinha entrado (hedge), marque o resultado real dessa reaposta — não assuma que ela sempre ganha.</div>
           </div>
           <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#71717a" }}>
-            Resultado dessa cobertura: <span className="mono" style={{ color: lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) >= 0 ? "#34d399" : "#fb7185", fontWeight: 600 }}>{fmt(lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado))}</span>
+            Resultado dessa cobertura: <span className="mono" style={{ color: lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda) >= 0 ? "#34d399" : "#fb7185", fontWeight: 600 }}>{fmt(lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda))}</span>
           </div>
         </div>
       )}
@@ -201,7 +221,7 @@ export default function Operacoes() {
 
   const confirmarResolucao = async (op, opcaoEscolhida, lucroOverride) => {
     const base = lucroOverride !== null && lucroOverride !== "" ? Number(lucroOverride) : opcaoEscolhida.lucro;
-    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
+    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda) : 0;
     const { error } = await supabase.from("operacoes").update({
       status: "finalizado",
       escolhida: opcaoEscolhida.label,
@@ -211,6 +231,7 @@ export default function Operacoes() {
       cobertura_stake: coberturaAtiva ? Number(coberturaStake || 0) : null,
       cobertura_lucro: coberturaAtiva ? covLucro : null,
       cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
+      cobertura_moeda: coberturaAtiva ? coberturaMoeda : null,
     }).eq("id", op.id);
     if (error) { alert("Erro ao salvar: " + error.message); return; }
     setResolvendoId(null);
@@ -219,7 +240,7 @@ export default function Operacoes() {
 
   const salvarCobertura = async (op) => {
     const base = op.lucro_base != null ? Number(op.lucro_base) : Number(op.lucro || 0);
-    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
+    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda) : 0;
     const { error } = await supabase.from("operacoes").update({
       lucro: base + covLucro,
       lucro_base: base,
@@ -227,6 +248,7 @@ export default function Operacoes() {
       cobertura_stake: coberturaAtiva ? Number(coberturaStake || 0) : null,
       cobertura_lucro: coberturaAtiva ? covLucro : null,
       cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
+      cobertura_moeda: coberturaAtiva ? coberturaMoeda : null,
     }).eq("id", op.id);
     if (error) { alert("Erro ao salvar: " + error.message); return; }
     setEditandoCoberturaId(null);
@@ -238,6 +260,7 @@ export default function Operacoes() {
     setCoberturaAtiva(op.cobertura_odd != null);
     setCoberturaOdd(op.cobertura_odd ?? "");
     setCoberturaStake(op.cobertura_stake ?? "");
+    setCoberturaMoeda(op.cobertura_moeda ?? "BRL");
     setCoberturaResultado(op.cobertura_resultado ?? "ganhou");
   };
 
@@ -274,7 +297,7 @@ export default function Operacoes() {
 
   const confirmarResolucaoDetalhada = async (op) => {
     const base = calcularLucroDetalhado(op);
-    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
+    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda) : 0;
     const escolhidaResumo = (op.opcoes || [])
       .map((o) => `${o.label}: ${statusPontas[o.label] || "perdeu"}`)
       .join(", ");
@@ -287,6 +310,7 @@ export default function Operacoes() {
       cobertura_stake: coberturaAtiva ? Number(coberturaStake || 0) : null,
       cobertura_lucro: coberturaAtiva ? covLucro : null,
       cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
+      cobertura_moeda: coberturaAtiva ? coberturaMoeda : null,
     }).eq("id", op.id);
     if (error) { alert("Erro ao salvar: " + error.message); return; }
     setResolvendoId(null);
@@ -372,8 +396,8 @@ export default function Operacoes() {
           <CoberturaForm />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <span style={{ fontSize: 12, color: "#71717a" }}>Lucro final:</span>
-            <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: (calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0)) >= 0 ? "#34d399" : "#fb7185" }}>
-              {fmt(calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0))}
+            <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: (calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda) : 0)) >= 0 ? "#34d399" : "#fb7185" }}>
+              {fmt(calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda) : 0))}
             </span>
           </div>
           <button onClick={() => confirmarResolucaoDetalhada(op)} style={{ width: "100%", padding: "8px 0", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
@@ -505,11 +529,16 @@ export default function Operacoes() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 10 }}>
             <Campo label="Data"><input type="date" value={novo.data} onChange={(e) => setNovo({ ...novo, data: e.target.value })} className="input-field" /></Campo>
             <Campo label="Descrição"><input type="text" value={novo.descricao} onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} placeholder="ex: França x Bélgica" className="input-field" /></Campo>
-            <Campo label="Apostado (R$)"><input type="number" step="0.01" value={novo.apostado} onChange={(e) => setNovo({ ...novo, apostado: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+            <Campo label="Apostado">
+              <div style={{ display: "flex", gap: 6 }}>
+                <input type="number" step="0.01" value={novo.apostado} onChange={(e) => setNovo({ ...novo, apostado: e.target.value })} placeholder="0,00" className="input-field" style={{ flex: 1 }} />
+                <SeletorMoedaMini value={novo.moeda} onChange={(m) => setNovo({ ...novo, moeda: m })} />
+              </div>
+            </Campo>
             {novo.modo === "pendente" ? (
               <Campo label="Odd"><input type="number" step="0.01" value={novo.odd} onChange={(e) => setNovo({ ...novo, odd: e.target.value })} placeholder="ex: 1.80" className="input-field" /></Campo>
             ) : (
-              <Campo label="Lucro (R$)"><input type="number" step="0.01" value={novo.lucro} onChange={(e) => setNovo({ ...novo, lucro: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+              <Campo label={`Lucro (${novo.moeda === "USD" ? "US$" : "R$"})`}><input type="number" step="0.01" value={novo.lucro} onChange={(e) => setNovo({ ...novo, lucro: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
             )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>

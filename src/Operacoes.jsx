@@ -20,6 +20,7 @@ export default function Operacoes() {
   const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL" }); // modo: "finalizada" | "pendente"
   const [resolvendoId, setResolvendoId] = useState(null);
   const [lucroManual, setLucroManual] = useState("");
+  const [lucroManualMoeda, setLucroManualMoeda] = useState("BRL");
   const [verificando, setVerificando] = useState(null);
 
   // ---------- cotação (mesma lógica/cache da Calculadora) ----------
@@ -176,6 +177,7 @@ export default function Operacoes() {
   const abrirResolver = (op) => {
     setResolvendoId(op.id);
     setLucroManual("");
+    setLucroManualMoeda("BRL");
     setModoDetalhado(false);
     setStatusPontas({});
     setStakesCorrigidas({});
@@ -220,7 +222,8 @@ export default function Operacoes() {
   );
 
   const confirmarResolucao = async (op, opcaoEscolhida, lucroOverride) => {
-    const base = lucroOverride !== null && lucroOverride !== "" ? Number(lucroOverride) : opcaoEscolhida.lucro;
+    const fatorManual = lucroManualMoeda === "USD" ? usdToBrl : 1;
+    const base = lucroOverride !== null && lucroOverride !== "" ? Number(lucroOverride) * fatorManual : opcaoEscolhida.lucro;
     const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado, coberturaMoeda) : 0;
     const { error } = await supabase.from("operacoes").update({
       status: "finalizado",
@@ -420,7 +423,10 @@ export default function Operacoes() {
             ))}
           </div>
           <Campo label="Ajustar lucro final (opcional — ex: valor real sem a cobertura)">
-            <input type="number" step="0.01" value={lucroManual} onChange={(e) => setLucroManual(e.target.value)} placeholder="deixa em branco pra usar o valor da opção clicada" className="input-field" />
+            <div style={{ display: "flex", gap: 6 }}>
+              <input type="number" step="0.01" value={lucroManual} onChange={(e) => setLucroManual(e.target.value)} placeholder="deixa em branco pra usar o valor da opção clicada" className="input-field" style={{ flex: 1 }} />
+              <SeletorMoedaMini value={lucroManualMoeda} onChange={setLucroManualMoeda} />
+            </div>
           </Campo>
           <CoberturaForm />
           <div style={{ fontSize: 11.5, color: "#71717a" }}>

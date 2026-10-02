@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabase";
-import { ChevronLeft, ChevronRight, TrendingUp, Activity, Trash2, Plus, Check, RefreshCw, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingUp, Activity, Trash2, Plus, Check, RefreshCw, Clock, Pencil } from "lucide-react";
 
 const RATE_CACHE_KEY = "cashbig_usdbrl_rate";
 const RATE_MAX_AGE = 24 * 60 * 60 * 1000;
@@ -135,6 +135,19 @@ export default function Operacoes() {
   const [coberturaStake, setCoberturaStake] = useState("");
   const [coberturaResultado, setCoberturaResultado] = useState("ganhou"); // "ganhou" | "perdeu"
   const [editandoCoberturaId, setEditandoCoberturaId] = useState(null);
+  const [editandoNomeId, setEditandoNomeId] = useState(null);
+  const [novoNome, setNovoNome] = useState("");
+
+  const abrirEdicaoNome = (op) => {
+    setEditandoNomeId(op.id);
+    setNovoNome(op.descricao || "");
+  };
+
+  const salvarNome = async (op) => {
+    await supabase.from("operacoes").update({ descricao: novoNome.trim() || null }).eq("id", op.id);
+    setEditandoNomeId(null);
+    carregar();
+  };
 
   const lucroCobertura = (odd, stake, resultado) => {
     const o = Number(odd || 0), s = Number(stake || 0);
@@ -147,10 +160,10 @@ export default function Operacoes() {
     setLucroManual("");
     setModoDetalhado(false);
     setStatusPontas({});
-    setCoberturaAtiva(false);
-    setCoberturaOdd("");
-    setCoberturaStake("");
-    setCoberturaResultado("ganhou");
+    setCoberturaAtiva(op.cobertura_odd != null);
+    setCoberturaOdd(op.cobertura_odd ?? "");
+    setCoberturaStake(op.cobertura_stake ?? "");
+    setCoberturaResultado(op.cobertura_resultado ?? "ganhou");
   };
 
   const CoberturaForm = () => (
@@ -256,6 +269,89 @@ export default function Operacoes() {
     setResolvendoId(null);
     carregar();
   };
+
+  const PainelResolver = ({ op }) => (
+    <div>
+      {temDadosDetalhados(op) && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          <button onClick={() => setModoDetalhado(false)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${!modoDetalhado ? "#fbbf24" : "#27292e"}`, background: !modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: !modoDetalhado ? "#fbbf24" : "#71717a" }}>
+            Simples (uma bateu)
+          </button>
+          <button onClick={() => setModoDetalhado(true)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${modoDetalhado ? "#fbbf24" : "#27292e"}`, background: modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: modoDetalhado ? "#fbbf24" : "#71717a" }}>
+            Detalhado (void/anulada)
+          </button>
+        </div>
+      )}
+
+      {modoDetalhado ? (
+        <div>
+          <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Marca o que aconteceu em cada ponta:</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+            {(op.opcoes || []).map((o, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10" }}>
+                <span style={{ fontSize: 12.5, color: "#e4e4e7" }}>{o.label}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[
+                    { v: "ganhou", label: "Ganhou", cor: "#34d399" },
+                    { v: "perdeu", label: "Perdeu", cor: "#fb7185" },
+                    { v: "anulado", label: "Anulado", cor: "#94a3b8" },
+                  ].map((opt) => {
+                    const ativo = (statusPontas[o.label] || "perdeu") === opt.v;
+                    return (
+                      <button
+                        key={opt.v}
+                        onClick={() => setStatusPontas((prev) => ({ ...prev, [o.label]: opt.v }))}
+                        style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 5, fontWeight: 600, border: `1px solid ${ativo ? opt.cor : "#27292e"}`, background: ativo ? `${opt.cor}22` : "transparent", color: ativo ? opt.cor : "#71717a" }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ fontSize: 12, color: "#71717a" }}>Lucro base:</span>
+            <span className="mono" style={{ fontSize: 13, color: "#a1a1aa" }}>{fmt(calcularLucroDetalhado(op))}</span>
+          </div>
+          <CoberturaForm />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: "#71717a" }}>Lucro final:</span>
+            <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: (calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0)) >= 0 ? "#34d399" : "#fb7185" }}>
+              {fmt(calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0))}
+            </span>
+          </div>
+          <button onClick={() => confirmarResolucaoDetalhada(op)} style={{ width: "100%", padding: "8px 0", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
+            Confirmar resultado
+          </button>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Qual bateu?</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+            {(op.opcoes || []).map((o, i) => (
+              <button
+                key={i}
+                onClick={() => confirmarResolucao(op, o, lucroManual)}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
+              >
+                <span>{o.label}</span>
+                <span className="mono" style={{ color: o.lucro >= 0 ? "#34d399" : "#fb7185" }}>{fmt(o.lucro)}</span>
+              </button>
+            ))}
+          </div>
+          <Campo label="Ajustar lucro final (opcional — ex: valor real sem a cobertura)">
+            <input type="number" step="0.01" value={lucroManual} onChange={(e) => setLucroManual(e.target.value)} placeholder="deixa em branco pra usar o valor da opção clicada" className="input-field" />
+          </Campo>
+          <CoberturaForm />
+          <div style={{ fontSize: 11.5, color: "#71717a" }}>
+            Clica numa opção acima pra confirmar — a cobertura marcada aqui já entra somada no lucro final.
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   // ---------- verificação automática de placar (TheSportsDB) ----------
   const verificarResultado = async (op) => {
@@ -439,8 +535,19 @@ export default function Operacoes() {
             {pendentesDoMes.slice().reverse().map((op) => (
               <div key={op.id} style={{ borderRadius: 10, border: "1px solid rgba(251,191,36,.3)", background: "rgba(251,191,36,.03)", padding: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: resolvendoId === op.id ? 10 : 0 }}>
-                  <div>
-                    <div style={{ fontSize: 13, color: "#e4e4e7" }}>{op.descricao || "Sem descrição"}</div>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    {editandoNomeId === op.id ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} onKeyDown={(e) => e.key === "Enter" && salvarNome(op)} className="input-field" style={{ fontSize: 12.5, padding: "4px 8px", maxWidth: 220 }} />
+                        <button onClick={() => salvarNome(op)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "#fbbf24", color: "#0b0d10", border: "none" }}>salvar</button>
+                        <button onClick={() => setEditandoNomeId(null)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "none", color: "#71717a", border: "1px solid #27292e" }}>cancelar</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{ fontSize: 13, color: "#e4e4e7" }}>{op.descricao || "Sem descrição"}</div>
+                        <button onClick={() => abrirEdicaoNome(op)} style={{ background: "none", border: "none", color: "#52525b" }}><Pencil size={11} /></button>
+                      </div>
+                    )}
                     <div style={{ fontSize: 10.5, color: "#71717a" }} className="mono">
                       {op.data.slice(8, 10)}/{op.data.slice(5, 7)} · apostado {fmt(op.apostado)}
                       {op.evento_liga && <span> · {op.evento_liga}</span>}
@@ -460,88 +567,7 @@ export default function Operacoes() {
                   </div>
                 </div>
 
-                {resolvendoId === op.id && (
-                  <div>
-                    {temDadosDetalhados(op) && (
-                      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                        <button onClick={() => setModoDetalhado(false)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${!modoDetalhado ? "#fbbf24" : "#27292e"}`, background: !modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: !modoDetalhado ? "#fbbf24" : "#71717a" }}>
-                          Simples (uma bateu)
-                        </button>
-                        <button onClick={() => setModoDetalhado(true)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${modoDetalhado ? "#fbbf24" : "#27292e"}`, background: modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: modoDetalhado ? "#fbbf24" : "#71717a" }}>
-                          Detalhado (void/anulada)
-                        </button>
-                      </div>
-                    )}
-
-                    {modoDetalhado ? (
-                      <div>
-                        <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Marca o que aconteceu em cada ponta:</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-                          {(op.opcoes || []).map((o, i) => (
-                            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10" }}>
-                              <span style={{ fontSize: 12.5, color: "#e4e4e7" }}>{o.label}</span>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                {[
-                                  { v: "ganhou", label: "Ganhou", cor: "#34d399" },
-                                  { v: "perdeu", label: "Perdeu", cor: "#fb7185" },
-                                  { v: "anulado", label: "Anulado", cor: "#94a3b8" },
-                                ].map((opt) => {
-                                  const ativo = (statusPontas[o.label] || "perdeu") === opt.v;
-                                  return (
-                                    <button
-                                      key={opt.v}
-                                      onClick={() => setStatusPontas((prev) => ({ ...prev, [o.label]: opt.v }))}
-                                      style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 5, fontWeight: 600, border: `1px solid ${ativo ? opt.cor : "#27292e"}`, background: ativo ? `${opt.cor}22` : "transparent", color: ativo ? opt.cor : "#71717a" }}
-                                    >
-                                      {opt.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, color: "#71717a" }}>Lucro base:</span>
-                          <span className="mono" style={{ fontSize: 13, color: "#a1a1aa" }}>{fmt(calcularLucroDetalhado(op))}</span>
-                        </div>
-                        <CoberturaForm />
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                          <span style={{ fontSize: 12, color: "#71717a" }}>Lucro final:</span>
-                          <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: (calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0)) >= 0 ? "#34d399" : "#fb7185" }}>
-                            {fmt(calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0))}
-                          </span>
-                        </div>
-                        <button onClick={() => confirmarResolucaoDetalhada(op)} style={{ width: "100%", padding: "8px 0", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
-                          Confirmar resultado
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Qual bateu?</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                          {(op.opcoes || []).map((o, i) => (
-                            <button
-                              key={i}
-                              onClick={() => confirmarResolucao(op, o, lucroManual)}
-                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
-                            >
-                              <span>{o.label}</span>
-                              <span className="mono" style={{ color: o.lucro >= 0 ? "#34d399" : "#fb7185" }}>{fmt(o.lucro)}</span>
-                            </button>
-                          ))}
-                        </div>
-                        <Campo label="Ajustar lucro final (opcional — ex: valor real sem a cobertura)">
-                          <input type="number" step="0.01" value={lucroManual} onChange={(e) => setLucroManual(e.target.value)} placeholder="deixa em branco pra usar o valor da opção clicada" className="input-field" />
-                        </Campo>
-                        <CoberturaForm />
-                        <div style={{ fontSize: 11.5, color: "#71717a" }}>
-                          Clica numa opção acima pra confirmar — a cobertura marcada aqui já entra somada no lucro final.
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                {resolvendoId === op.id && <PainelResolver op={op} />}
               </div>
             ))}
           </div>
@@ -560,7 +586,18 @@ export default function Operacoes() {
               <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}>
                 <div className="mono" style={{ fontSize: 11, color: "#52525b", width: 60, flexShrink: 0 }}>{o.data.slice(8, 10)}/{o.data.slice(5, 7)}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.descricao || "Sem descrição"}</div>
+                  {editandoNomeId === o.id ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} onKeyDown={(e) => e.key === "Enter" && salvarNome(o)} className="input-field" style={{ fontSize: 12.5, padding: "4px 8px", maxWidth: 200 }} />
+                      <button onClick={() => salvarNome(o)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "#fbbf24", color: "#0b0d10", border: "none" }}>salvar</button>
+                      <button onClick={() => setEditandoNomeId(null)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "none", color: "#71717a", border: "1px solid #27292e" }}>cancelar</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ fontSize: 13, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.descricao || "Sem descrição"}</div>
+                      <button onClick={() => abrirEdicaoNome(o)} style={{ background: "none", border: "none", color: "#52525b", flexShrink: 0 }}><Pencil size={11} /></button>
+                    </div>
+                  )}
                   <div style={{ fontSize: 10.5, color: "#52525b" }}>
                     {o.escolhida ? `Bateu: ${o.escolhida}` : (o.tipo === "multiplas" ? "Múltiplas casas" : o.tipo === "backlay" ? "Back x Lay" : o.tipo === "backdc" ? "Back + Dupla Chance" : o.tipo === "dg2up" ? "Duplo Green 2UP" : "Manual")}
                     {o.resultado_final && ` · ${o.resultado_final}`}
@@ -571,6 +608,14 @@ export default function Operacoes() {
                   <div className="mono" style={{ fontSize: 11, color: "#71717a" }}>Apostado: {fmt(o.apostado)}</div>
                   <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: Number(o.lucro) >= 0 ? "#34d399" : "#fb7185" }}>{Number(o.lucro) >= 0 ? "+" : ""}{fmt(o.lucro)}</div>
                 </div>
+                {(o.opcoes || []).length > 0 && (
+                  <button
+                    onClick={() => (resolvendoId === o.id ? setResolvendoId(null) : abrirResolver(o))}
+                    style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "#27292e", color: "#a1a1aa", border: "none", flexShrink: 0 }}
+                  >
+                    {resolvendoId === o.id ? "fechar" : "editar resultado"}
+                  </button>
+                )}
                 <button
                   onClick={() => (editandoCoberturaId === o.id ? setEditandoCoberturaId(null) : abrirEdicaoCobertura(o))}
                   style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: o.cobertura_odd != null ? "rgba(52,211,153,.12)" : "#27292e", color: o.cobertura_odd != null ? "#34d399" : "#a1a1aa", border: "none", flexShrink: 0 }}
@@ -579,6 +624,12 @@ export default function Operacoes() {
                 </button>
                 <button onClick={() => excluir(o.id)} style={{ background: "none", border: "none", color: "#3f3f46", flexShrink: 0 }}><Trash2 size={13} /></button>
               </div>
+
+              {resolvendoId === o.id && (
+                <div style={{ padding: "0 14px 14px" }}>
+                  <PainelResolver op={o} />
+                </div>
+              )}
 
               {editandoCoberturaId === o.id && (
                 <div style={{ padding: "0 14px 14px" }}>

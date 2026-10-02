@@ -217,6 +217,7 @@ export default function Calculadora() {
     return {
       dcStakeAutoNative, dcStakeBRL, stakeTotal, lucroSeBackGanha, lucroSeDCGanha, cashbackBackValor, cashbackDCValor,
       dcOddMedia, temPreenchimento, totalPreenchidoNative, faltandoAtribuirNative,
+      backStakeBRLReal: bdc.freebet ? 0 : backStakeBRL, payoutBack, payoutDC,
     };
   }, [bdc, usdToBrl]);
 
@@ -302,21 +303,17 @@ export default function Calculadora() {
     setBuscando(true);
     setJogosEncontrados([]);
     try {
-      const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${buscaData}&s=Soccer`);
+      const res = await fetch(`/api/eventos?action=buscar&data=${buscaData}&time=${encodeURIComponent(buscaTime.trim())}`);
       const data = await res.json();
-      const termo = buscaTime.trim().toLowerCase();
-      const achados = (data?.events || []).filter(
-        (e) => e.strHomeTeam?.toLowerCase().includes(termo) || e.strAwayTeam?.toLowerCase().includes(termo)
-      );
-      setJogosEncontrados(achados);
+      setJogosEncontrados(data?.matches || []);
     } catch (e) {
       console.error("Erro ao buscar jogos", e);
     }
     setBuscando(false);
   };
 
-  const selecionarJogo = (e) => {
-    setJogo({ id: e.idEvent, home: e.strHomeTeam, away: e.strAwayTeam, liga: e.strLeague, data: e.dateEvent });
+  const selecionarJogo = (m) => {
+    setJogo({ id: m.id, home: m.homeTeam?.name, away: m.awayTeam?.name, liga: m.competition?.name, data: (m.utcDate || "").slice(0, 10) });
     setJogosEncontrados([]);
   };
 
@@ -624,6 +621,7 @@ export default function Calculadora() {
         id: c.id, nome: c.nome, oddMedia: totais[i].oddMedia, numEntradas: c.entradas.length,
         comissao: c.comissao, stakeNative: totais[i].totalStake, moeda: c.moeda, stakeBRL: stakesBRL[i],
         freebet: c.freebet, cashbackPct: c.cashback_ativo ? c.cashback_pct : null, deficit, seguro, lucro, roi,
+        payoutBRL: payout, cashbackOwnBRL: cashbackValor[i], dinheiroRealBRL: dinheiroReal[i],
       };
     });
     const lucros = linhas.map((l) => l.lucro);
@@ -970,8 +968,8 @@ export default function Calculadora() {
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
               <button
                 onClick={() => lancarOperacao("Back + Dupla Chance", "backdc", bdcCalc.stakeTotal, [
-                  { label: "Back ganhou", lucro: bdcCalc.lucroSeBackGanha },
-                  { label: "Dupla Chance ganhou", lucro: bdcCalc.lucroSeDCGanha },
+                  { label: "Back ganhou", lucro: bdcCalc.lucroSeBackGanha, stakeBRL: bdcCalc.backStakeBRLReal, payoutBRL: bdcCalc.payoutBack, cashbackBRL: bdcCalc.cashbackBackValor },
+                  { label: "Dupla Chance ganhou", lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
                 ])}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
               >
@@ -1166,14 +1164,14 @@ export default function Calculadora() {
             </div>
             {jogosEncontrados.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                {jogosEncontrados.map((e) => (
+                {jogosEncontrados.map((m) => (
                   <button
-                    key={e.idEvent}
-                    onClick={() => selecionarJogo(e)}
+                    key={m.id}
+                    onClick={() => selecionarJogo(m)}
                     style={{ textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
                   >
-                    <strong>{e.strHomeTeam}</strong> x <strong>{e.strAwayTeam}</strong>
-                    <span style={{ color: "#71717a", marginLeft: 6 }}>{e.strLeague} · {e.dateEvent}</span>
+                    <strong>{m.homeTeam?.name}</strong> x <strong>{m.awayTeam?.name}</strong>
+                    <span style={{ color: "#71717a", marginLeft: 6 }}>{m.competition?.name} · {(m.utcDate || "").slice(0, 10)}</span>
                   </button>
                 ))}
               </div>
@@ -1371,10 +1369,17 @@ export default function Calculadora() {
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
           <button
             onClick={() => lancarOperacao(
-              jogo ? `${jogo.home} x ${jogo.away}` : (casas.map((c) => c.nome).filter(Boolean).join(" x ") || "Múltiplas casas"),
+              jogo ? `${jogo.home} x ${jogo.away}` : (nomeCalculo.trim() || casas.map((c) => c.nome).filter(Boolean).join(" x ") || "Múltiplas casas"),
               "multiplas",
               resultados.stakeTotal,
-              resultados.linhas.map((l, i) => ({ label: l.nome || "Casa", lucro: l.lucro, selecao: casas[i]?.selecao || null })),
+              resultados.linhas.map((l, i) => ({
+                label: l.nome || "Casa",
+                lucro: l.lucro,
+                selecao: casas[i]?.selecao || null,
+                stakeBRL: l.dinheiroRealBRL,
+                payoutBRL: l.payoutBRL,
+                cashbackBRL: l.cashbackOwnBRL,
+              })),
               jogo
             )}
             style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}

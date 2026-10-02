@@ -3,6 +3,10 @@ import { supabase } from "./supabase";
 import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2, Calculator, DollarSign, TrendingUp } from "lucide-react";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+const localDateStr = (d = new Date()) => {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
 const fmt = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtUSD = (v) => (Number(v) || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const fmtMoeda = (v, moeda) => (moeda === "USD" ? fmtUSD(v) : fmt(v));
@@ -274,7 +278,7 @@ export default function Calculadora() {
   const lancarOperacao = async (descricao, tipo, apostado, opcoes, jogoInfo = null) => {
     setLancamento("saving");
     const { error } = await supabase.from("operacoes").insert({
-      data: new Date().toISOString().slice(0, 10),
+      data: localDateStr(),
       descricao,
       tipo,
       apostado: Number(apostado) || 0,
@@ -294,7 +298,7 @@ export default function Calculadora() {
   // ---------- busca de jogo (pra conferência automática de resultado) ----------
   const [jogo, setJogo] = useState(null); // { id, home, away, liga, data }
   const [buscaTime, setBuscaTime] = useState("");
-  const [buscaData, setBuscaData] = useState(new Date().toISOString().slice(0, 10));
+  const [buscaData, setBuscaData] = useState(localDateStr());
   const [jogosEncontrados, setJogosEncontrados] = useState([]);
   const [buscando, setBuscando] = useState(false);
 

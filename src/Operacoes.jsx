@@ -686,7 +686,11 @@ export default function Operacoes() {
                   <div style={{ fontSize: 10.5, color: "#52525b" }}>
                     {o.escolhida ? `Bateu: ${o.escolhida}` : (o.tipo === "multiplas" ? "Múltiplas casas" : o.tipo === "backlay" ? "Back x Lay" : o.tipo === "backdc" ? "Back + Dupla Chance" : o.tipo === "dg2up" ? "Duplo Green 2UP" : "Manual")}
                     {o.resultado_final && ` · ${o.resultado_final}`}
-                    {o.cobertura_odd != null && <span style={{ color: "#34d399" }}> · cobertura: +{fmt(o.cobertura_lucro)}</span>}
+                    {o.cobertura_odd != null && (
+                      <span style={{ color: Number(o.cobertura_lucro) >= 0 ? "#34d399" : "#fb7185" }}>
+                        {" "}· cobertura: {Number(o.cobertura_lucro) >= 0 ? "+" : ""}{fmt(o.cobertura_lucro)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>

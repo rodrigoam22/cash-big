@@ -130,6 +130,7 @@ export default function Operacoes() {
 
   const [modoDetalhado, setModoDetalhado] = useState(false);
   const [statusPontas, setStatusPontas] = useState({}); // { label: "ganhou" | "perdeu" | "anulado" }
+  const [stakesCorrigidas, setStakesCorrigidas] = useState({}); // { label: "valor real digitado" }
   const [coberturaAtiva, setCoberturaAtiva] = useState(false);
   const [coberturaOdd, setCoberturaOdd] = useState("");
   const [coberturaStake, setCoberturaStake] = useState("");
@@ -146,7 +147,8 @@ export default function Operacoes() {
   };
 
   const salvarNome = async (op) => {
-    await supabase.from("operacoes").update({ descricao: novoNome.trim() || null, data: novaData }).eq("id", op.id);
+    const { error } = await supabase.from("operacoes").update({ descricao: novoNome.trim() || null, data: novaData }).eq("id", op.id);
+    if (error) { alert("Erro ao salvar: " + error.message); return; }
     setEditandoNomeId(null);
     carregar();
   };
@@ -162,6 +164,7 @@ export default function Operacoes() {
     setLucroManual("");
     setModoDetalhado(false);
     setStatusPontas({});
+    setStakesCorrigidas({});
     setCoberturaAtiva(op.cobertura_odd != null);
     setCoberturaOdd(op.cobertura_odd ?? "");
     setCoberturaStake(op.cobertura_stake ?? "");
@@ -199,7 +202,7 @@ export default function Operacoes() {
   const confirmarResolucao = async (op, opcaoEscolhida, lucroOverride) => {
     const base = lucroOverride !== null && lucroOverride !== "" ? Number(lucroOverride) : opcaoEscolhida.lucro;
     const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
-    await supabase.from("operacoes").update({
+    const { error } = await supabase.from("operacoes").update({
       status: "finalizado",
       escolhida: opcaoEscolhida.label,
       lucro: base + covLucro,
@@ -209,6 +212,7 @@ export default function Operacoes() {
       cobertura_lucro: coberturaAtiva ? covLucro : null,
       cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
     }).eq("id", op.id);
+    if (error) { alert("Erro ao salvar: " + error.message); return; }
     setResolvendoId(null);
     carregar();
   };
@@ -216,7 +220,7 @@ export default function Operacoes() {
   const salvarCobertura = async (op) => {
     const base = op.lucro_base != null ? Number(op.lucro_base) : Number(op.lucro || 0);
     const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
-    await supabase.from("operacoes").update({
+    const { error } = await supabase.from("operacoes").update({
       lucro: base + covLucro,
       lucro_base: base,
       cobertura_odd: coberturaAtiva ? Number(coberturaOdd || 0) : null,
@@ -224,6 +228,7 @@ export default function Operacoes() {
       cobertura_lucro: coberturaAtiva ? covLucro : null,
       cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
     }).eq("id", op.id);
+    if (error) { alert("Erro ao salvar: " + error.message); return; }
     setEditandoCoberturaId(null);
     carregar();
   };
@@ -245,9 +250,10 @@ export default function Operacoes() {
     const apostadoTotal = Number(op.apostado || 0);
     return opcoes.map((o) => {
       const temExato = o.stakeBRL != null && o.payoutBRL != null;
-      const stakeBRL = temExato ? Number(o.stakeBRL) : apostadoTotal / n;
+      const corrigida = stakesCorrigidas[o.label];
+      const stakeBRL = corrigida !== undefined && corrigida !== "" ? Number(corrigida) : (temExato ? Number(o.stakeBRL) : apostadoTotal / n);
       const payoutBRL = temExato ? Number(o.payoutBRL) : Number(o.lucro || 0) + apostadoTotal;
-      return { ...o, stakeBRL, payoutBRL, estimado: !temExato };
+      return { ...o, stakeBRL, payoutBRL, estimado: !temExato && corrigida === undefined };
     });
   };
 
@@ -272,7 +278,7 @@ export default function Operacoes() {
     const escolhidaResumo = (op.opcoes || [])
       .map((o) => `${o.label}: ${statusPontas[o.label] || "perdeu"}`)
       .join(", ");
-    await supabase.from("operacoes").update({
+    const { error } = await supabase.from("operacoes").update({
       status: "finalizado",
       escolhida: escolhidaResumo,
       lucro: base + covLucro,
@@ -282,12 +288,23 @@ export default function Operacoes() {
       cobertura_lucro: coberturaAtiva ? covLucro : null,
       cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
     }).eq("id", op.id);
+    if (error) { alert("Erro ao salvar: " + error.message); return; }
     setResolvendoId(null);
+    carregar();
+  };
+
+  const mudarData = async (op, novaDataVal) => {
+    const { error } = await supabase.from("operacoes").update({ data: novaDataVal }).eq("id", op.id);
+    if (error) { alert("Erro ao salvar: " + error.message); return; }
     carregar();
   };
 
   const PainelResolver = ({ op }) => (
     <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500 }}>Data do jogo:</label>
+        <input type="date" value={op.data} onChange={(e) => mudarData(op, e.target.value)} className="input-field" style={{ width: 150 }} />
+      </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
         <button onClick={() => setModoDetalhado(false)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${!modoDetalhado ? "#fbbf24" : "#27292e"}`, background: !modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: !modoDetalhado ? "#fbbf24" : "#71717a" }}>
           Simples (uma bateu)
@@ -306,29 +323,47 @@ export default function Operacoes() {
         <div>
           <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Marca o que aconteceu em cada ponta:</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-            {(op.opcoes || []).map((o, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10" }}>
-                <span style={{ fontSize: 12.5, color: "#e4e4e7" }}>{o.label}</span>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[
-                    { v: "ganhou", label: "Ganhou", cor: "#34d399" },
-                    { v: "perdeu", label: "Perdeu", cor: "#fb7185" },
-                    { v: "anulado", label: "Anulado", cor: "#94a3b8" },
-                  ].map((opt) => {
-                    const ativo = (statusPontas[o.label] || "perdeu") === opt.v;
-                    return (
-                      <button
-                        key={opt.v}
-                        onClick={() => setStatusPontas((prev) => ({ ...prev, [o.label]: opt.v }))}
-                        style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 5, fontWeight: 600, border: `1px solid ${ativo ? opt.cor : "#27292e"}`, background: ativo ? `${opt.cor}22` : "transparent", color: ativo ? opt.cor : "#71717a" }}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
+            {pontasComValores(op).map((o, i) => (
+              <div key={i} style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12.5, color: "#e4e4e7" }}>{o.label}</span>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[
+                      { v: "ganhou", label: "Ganhou", cor: "#34d399" },
+                      { v: "perdeu", label: "Perdeu", cor: "#fb7185" },
+                      { v: "anulado", label: "Anulado", cor: "#94a3b8" },
+                    ].map((opt) => {
+                      const ativo = (statusPontas[o.label] || "perdeu") === opt.v;
+                      return (
+                        <button
+                          key={opt.v}
+                          onClick={() => setStatusPontas((prev) => ({ ...prev, [o.label]: opt.v }))}
+                          style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 5, fontWeight: 600, border: `1px solid ${ativo ? opt.cor : "#27292e"}`, background: ativo ? `${opt.cor}22` : "transparent", color: ativo ? opt.cor : "#71717a" }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+                {o.estimado && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                    <span style={{ fontSize: 10, color: "#fbbf24" }}>Stake estimada: {fmt(o.stakeBRL)} — corrigir pra real:</span>
+                    <input
+                      type="number" step="0.01"
+                      value={stakesCorrigidas[o.label] ?? ""}
+                      onChange={(e) => setStakesCorrigidas((prev) => ({ ...prev, [o.label]: e.target.value }))}
+                      placeholder="valor real (R$)"
+                      className="input-field"
+                      style={{ width: 130, fontSize: 11, padding: "3px 6px" }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
+          </div>
+          <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 10 }}>
+            💡 O que mais importa corrigir são as pontas marcadas "Perdeu" — a stake de uma ponta "Anulada" não muda o resultado final, já que ela sempre volta inteira.
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <span style={{ fontSize: 12, color: "#71717a" }}>Lucro base:</span>

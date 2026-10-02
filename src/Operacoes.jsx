@@ -17,7 +17,7 @@ export default function Operacoes() {
   const [operacoes, setOperacoes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
-  const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "" });
+  const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada" }); // modo: "finalizada" | "pendente"
   const [resolvendoId, setResolvendoId] = useState(null);
   const [lucroManual, setLucroManual] = useState("");
   const [verificando, setVerificando] = useState(null);
@@ -93,16 +93,31 @@ export default function Operacoes() {
   }, [operacoes, ano, mes]);
 
   const adicionar = async () => {
-    const { error } = await supabase.from("operacoes").insert({
-      data: novo.data,
-      descricao: novo.descricao || null,
-      tipo: "manual",
-      apostado: novo.apostado === "" ? 0 : Number(novo.apostado),
-      lucro: novo.lucro === "" ? 0 : Number(novo.lucro),
-      status: "finalizado",
-    });
+    const stake = novo.apostado === "" ? 0 : Number(novo.apostado);
+    const payload = novo.modo === "pendente"
+      ? {
+          data: novo.data,
+          descricao: novo.descricao || null,
+          tipo: "manual",
+          apostado: stake,
+          lucro: 0,
+          status: "pendente",
+          opcoes: [
+            { label: "Ganhou", lucro: stake * (Number(novo.odd || 0) - 1) },
+            { label: "Perdeu", lucro: -stake },
+          ],
+        }
+      : {
+          data: novo.data,
+          descricao: novo.descricao || null,
+          tipo: "manual",
+          apostado: stake,
+          lucro: novo.lucro === "" ? 0 : Number(novo.lucro),
+          status: "finalizado",
+        };
+    const { error } = await supabase.from("operacoes").insert(payload);
     if (!error) {
-      setNovo({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "" });
+      setNovo({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada" });
       setMostrarForm(false);
       carregar();
     }
@@ -113,17 +128,130 @@ export default function Operacoes() {
     carregar();
   };
 
+  const [modoDetalhado, setModoDetalhado] = useState(false);
+  const [statusPontas, setStatusPontas] = useState({}); // { label: "ganhou" | "perdeu" | "anulado" }
+  const [coberturaAtiva, setCoberturaAtiva] = useState(false);
+  const [coberturaOdd, setCoberturaOdd] = useState("");
+  const [coberturaStake, setCoberturaStake] = useState("");
+  const [coberturaResultado, setCoberturaResultado] = useState("ganhou"); // "ganhou" | "perdeu"
+  const [editandoCoberturaId, setEditandoCoberturaId] = useState(null);
+
+  const lucroCobertura = (odd, stake, resultado) => {
+    const o = Number(odd || 0), s = Number(stake || 0);
+    if (resultado === "perdeu") return -s;
+    return o > 1 ? s * (o - 1) : 0;
+  };
+
   const abrirResolver = (op) => {
     setResolvendoId(op.id);
     setLucroManual("");
+    setModoDetalhado(false);
+    setStatusPontas({});
+    setCoberturaAtiva(false);
+    setCoberturaOdd("");
+    setCoberturaStake("");
+    setCoberturaResultado("ganhou");
   };
 
+  const CoberturaForm = () => (
+    <div style={{ marginTop: 10, marginBottom: 10 }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer", marginBottom: coberturaAtiva ? 8 : 0 }}>
+        <input type="checkbox" checked={coberturaAtiva} onChange={(e) => setCoberturaAtiva(e.target.checked)} />
+        Teve cobertura/reaposta ao vivo (duplo green ou hedge)
+      </label>
+      {coberturaAtiva && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: 10, background: "rgba(251,191,36,.02)" }}>
+          <Campo label="Odd da reaposta"><input type="number" step="0.01" value={coberturaOdd} onChange={(e) => setCoberturaOdd(e.target.value)} placeholder="ex: 1.25" className="input-field" /></Campo>
+          <Campo label="Valor apostado (R$)"><input type="number" step="0.01" value={coberturaStake} onChange={(e) => setCoberturaStake(e.target.value)} placeholder="0,00" className="input-field" /></Campo>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
+              Essa reaposta, sozinha, ganhou ou perdeu?
+            </label>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => setCoberturaResultado("ganhou")} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, fontWeight: 600, border: `1px solid ${coberturaResultado === "ganhou" ? "#34d399" : "#27292e"}`, background: coberturaResultado === "ganhou" ? "rgba(52,211,153,.15)" : "transparent", color: coberturaResultado === "ganhou" ? "#34d399" : "#71717a" }}>Ganhou</button>
+              <button onClick={() => setCoberturaResultado("perdeu")} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, fontWeight: 600, border: `1px solid ${coberturaResultado === "perdeu" ? "#fb7185" : "#27292e"}`, background: coberturaResultado === "perdeu" ? "rgba(244,63,94,.15)" : "transparent", color: coberturaResultado === "perdeu" ? "#fb7185" : "#71717a" }}>Perdeu</button>
+            </div>
+            <div style={{ fontSize: 10.5, color: "#52525b", marginTop: 4 }}>Se você reapostou no time contrário ao que já tinha entrado (hedge), marque o resultado real dessa reaposta — não assuma que ela sempre ganha.</div>
+          </div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#71717a" }}>
+            Resultado dessa cobertura: <span className="mono" style={{ color: lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) >= 0 ? "#34d399" : "#fb7185", fontWeight: 600 }}>{fmt(lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado))}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   const confirmarResolucao = async (op, opcaoEscolhida, lucroOverride) => {
-    const lucroFinal = lucroOverride !== null && lucroOverride !== "" ? Number(lucroOverride) : opcaoEscolhida.lucro;
+    const base = lucroOverride !== null && lucroOverride !== "" ? Number(lucroOverride) : opcaoEscolhida.lucro;
+    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
     await supabase.from("operacoes").update({
       status: "finalizado",
       escolhida: opcaoEscolhida.label,
-      lucro: lucroFinal,
+      lucro: base + covLucro,
+      lucro_base: base,
+      cobertura_odd: coberturaAtiva ? Number(coberturaOdd || 0) : null,
+      cobertura_stake: coberturaAtiva ? Number(coberturaStake || 0) : null,
+      cobertura_lucro: coberturaAtiva ? covLucro : null,
+      cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
+    }).eq("id", op.id);
+    setResolvendoId(null);
+    carregar();
+  };
+
+  const salvarCobertura = async (op) => {
+    const base = op.lucro_base != null ? Number(op.lucro_base) : Number(op.lucro || 0);
+    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
+    await supabase.from("operacoes").update({
+      lucro: base + covLucro,
+      lucro_base: base,
+      cobertura_odd: coberturaAtiva ? Number(coberturaOdd || 0) : null,
+      cobertura_stake: coberturaAtiva ? Number(coberturaStake || 0) : null,
+      cobertura_lucro: coberturaAtiva ? covLucro : null,
+      cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
+    }).eq("id", op.id);
+    setEditandoCoberturaId(null);
+    carregar();
+  };
+
+  const abrirEdicaoCobertura = (op) => {
+    setEditandoCoberturaId(op.id);
+    setCoberturaAtiva(op.cobertura_odd != null);
+    setCoberturaOdd(op.cobertura_odd ?? "");
+    setCoberturaStake(op.cobertura_stake ?? "");
+    setCoberturaResultado(op.cobertura_resultado ?? "ganhou");
+  };
+
+  // pontas: têm stakeBRL/payoutBRL (só op lançada pela Múltiplas casas, depois dessa atualização)
+  const temDadosDetalhados = (op) => (op.opcoes || []).every((o) => o.stakeBRL != null && o.payoutBRL != null);
+
+  const calcularLucroDetalhado = (op) => {
+    const opcoes = op.opcoes || [];
+    let total = 0;
+    for (const o of opcoes) {
+      const st = statusPontas[o.label] || "perdeu";
+      if (st === "ganhou") total += Number(o.payoutBRL || 0);
+      else if (st === "anulado") total += Number(o.stakeBRL || 0);
+      else total += Number(o.cashbackBRL || 0); // perdeu: só soma o cashback dela, se tiver
+    }
+    const stakeTotal = opcoes.reduce((acc, o) => acc + Number(o.stakeBRL || 0), 0);
+    return total - stakeTotal;
+  };
+
+  const confirmarResolucaoDetalhada = async (op) => {
+    const base = calcularLucroDetalhado(op);
+    const covLucro = coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0;
+    const escolhidaResumo = (op.opcoes || [])
+      .map((o) => `${o.label}: ${statusPontas[o.label] || "perdeu"}`)
+      .join(", ");
+    await supabase.from("operacoes").update({
+      status: "finalizado",
+      escolhida: escolhidaResumo,
+      lucro: base + covLucro,
+      lucro_base: base,
+      cobertura_odd: coberturaAtiva ? Number(coberturaOdd || 0) : null,
+      cobertura_stake: coberturaAtiva ? Number(coberturaStake || 0) : null,
+      cobertura_lucro: coberturaAtiva ? covLucro : null,
+      cobertura_resultado: coberturaAtiva ? coberturaResultado : null,
     }).eq("id", op.id);
     setResolvendoId(null);
     carregar();
@@ -134,13 +262,13 @@ export default function Operacoes() {
     if (!op.evento_id) return;
     setVerificando(op.id);
     try {
-      const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/lookupevent.php?id=${op.evento_id}`);
-      const data = await res.json();
-      const ev = data?.events?.[0];
-      const homeScore = ev?.intHomeScore != null ? Number(ev.intHomeScore) : null;
-      const awayScore = ev?.intAwayScore != null ? Number(ev.intAwayScore) : null;
+      const res = await fetch(`/api/eventos?action=placar&id=${op.evento_id}`);
+      const ev = await res.json();
+      const finalizado = ev?.status === "FINISHED";
+      const homeScore = ev?.score?.fullTime?.home;
+      const awayScore = ev?.score?.fullTime?.away;
 
-      if (homeScore == null || awayScore == null) {
+      if (!finalizado || homeScore == null || awayScore == null) {
         alert("O jogo ainda não tem placar final registrado. Tenta de novo mais tarde.");
         setVerificando(null);
         return;
@@ -216,11 +344,23 @@ export default function Operacoes() {
 
       {mostrarForm && (
         <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14, marginBottom: 18 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <button onClick={() => setNovo({ ...novo, modo: "finalizada" })} style={{ fontSize: 11.5, padding: "5px 10px", borderRadius: 6, border: `1px solid ${novo.modo === "finalizada" ? "#fbbf24" : "#27292e"}`, background: novo.modo === "finalizada" ? "rgba(251,191,36,.12)" : "transparent", color: novo.modo === "finalizada" ? "#fbbf24" : "#71717a" }}>
+              Já finalizada
+            </button>
+            <button onClick={() => setNovo({ ...novo, modo: "pendente" })} style={{ fontSize: 11.5, padding: "5px 10px", borderRadius: 6, border: `1px solid ${novo.modo === "pendente" ? "#fbbf24" : "#27292e"}`, background: novo.modo === "pendente" ? "rgba(251,191,36,.12)" : "transparent", color: novo.modo === "pendente" ? "#fbbf24" : "#71717a" }}>
+              Pendente — aposta simples (ex: dupla chance avulsa no 2x0)
+            </button>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 10 }}>
             <Campo label="Data"><input type="date" value={novo.data} onChange={(e) => setNovo({ ...novo, data: e.target.value })} className="input-field" /></Campo>
             <Campo label="Descrição"><input type="text" value={novo.descricao} onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} placeholder="ex: França x Bélgica" className="input-field" /></Campo>
             <Campo label="Apostado (R$)"><input type="number" step="0.01" value={novo.apostado} onChange={(e) => setNovo({ ...novo, apostado: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
-            <Campo label="Lucro (R$)"><input type="number" step="0.01" value={novo.lucro} onChange={(e) => setNovo({ ...novo, lucro: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+            {novo.modo === "pendente" ? (
+              <Campo label="Odd"><input type="number" step="0.01" value={novo.odd} onChange={(e) => setNovo({ ...novo, odd: e.target.value })} placeholder="ex: 1.80" className="input-field" /></Campo>
+            ) : (
+              <Campo label="Lucro (R$)"><input type="number" step="0.01" value={novo.lucro} onChange={(e) => setNovo({ ...novo, lucro: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={adicionar} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#fbbf24", color: "#0b0d10", border: "none" }}>Salvar</button>
@@ -322,22 +462,84 @@ export default function Operacoes() {
 
                 {resolvendoId === op.id && (
                   <div>
-                    <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Qual bateu?</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                      {(op.opcoes || []).map((o, i) => (
-                        <button
-                          key={i}
-                          onClick={() => confirmarResolucao(op, o, lucroManual)}
-                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
-                        >
-                          <span>{o.label}</span>
-                          <span className="mono" style={{ color: o.lucro >= 0 ? "#34d399" : "#fb7185" }}>{fmt(o.lucro)}</span>
+                    {temDadosDetalhados(op) && (
+                      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                        <button onClick={() => setModoDetalhado(false)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${!modoDetalhado ? "#fbbf24" : "#27292e"}`, background: !modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: !modoDetalhado ? "#fbbf24" : "#71717a" }}>
+                          Simples (uma bateu)
                         </button>
-                      ))}
-                    </div>
-                    <Campo label="Ajustar lucro final (opcional — ex: valor real com cobertura/cashback)">
-                      <input type="number" step="0.01" value={lucroManual} onChange={(e) => setLucroManual(e.target.value)} placeholder="deixa em branco pra usar o valor da opção clicada" className="input-field" />
-                    </Campo>
+                        <button onClick={() => setModoDetalhado(true)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${modoDetalhado ? "#fbbf24" : "#27292e"}`, background: modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: modoDetalhado ? "#fbbf24" : "#71717a" }}>
+                          Detalhado (void/anulada)
+                        </button>
+                      </div>
+                    )}
+
+                    {modoDetalhado ? (
+                      <div>
+                        <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Marca o que aconteceu em cada ponta:</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+                          {(op.opcoes || []).map((o, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10" }}>
+                              <span style={{ fontSize: 12.5, color: "#e4e4e7" }}>{o.label}</span>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                {[
+                                  { v: "ganhou", label: "Ganhou", cor: "#34d399" },
+                                  { v: "perdeu", label: "Perdeu", cor: "#fb7185" },
+                                  { v: "anulado", label: "Anulado", cor: "#94a3b8" },
+                                ].map((opt) => {
+                                  const ativo = (statusPontas[o.label] || "perdeu") === opt.v;
+                                  return (
+                                    <button
+                                      key={opt.v}
+                                      onClick={() => setStatusPontas((prev) => ({ ...prev, [o.label]: opt.v }))}
+                                      style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 5, fontWeight: 600, border: `1px solid ${ativo ? opt.cor : "#27292e"}`, background: ativo ? `${opt.cor}22` : "transparent", color: ativo ? opt.cor : "#71717a" }}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: "#71717a" }}>Lucro base:</span>
+                          <span className="mono" style={{ fontSize: 13, color: "#a1a1aa" }}>{fmt(calcularLucroDetalhado(op))}</span>
+                        </div>
+                        <CoberturaForm />
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <span style={{ fontSize: 12, color: "#71717a" }}>Lucro final:</span>
+                          <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: (calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0)) >= 0 ? "#34d399" : "#fb7185" }}>
+                            {fmt(calcularLucroDetalhado(op) + (coberturaAtiva ? lucroCobertura(coberturaOdd, coberturaStake, coberturaResultado) : 0))}
+                          </span>
+                        </div>
+                        <button onClick={() => confirmarResolucaoDetalhada(op)} style={{ width: "100%", padding: "8px 0", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
+                          Confirmar resultado
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 10.5, color: "#71717a", marginBottom: 6 }}>Qual bateu?</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                          {(op.opcoes || []).map((o, i) => (
+                            <button
+                              key={i}
+                              onClick={() => confirmarResolucao(op, o, lucroManual)}
+                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
+                            >
+                              <span>{o.label}</span>
+                              <span className="mono" style={{ color: o.lucro >= 0 ? "#34d399" : "#fb7185" }}>{fmt(o.lucro)}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <Campo label="Ajustar lucro final (opcional — ex: valor real sem a cobertura)">
+                          <input type="number" step="0.01" value={lucroManual} onChange={(e) => setLucroManual(e.target.value)} placeholder="deixa em branco pra usar o valor da opção clicada" className="input-field" />
+                        </Campo>
+                        <CoberturaForm />
+                        <div style={{ fontSize: 11.5, color: "#71717a" }}>
+                          Clica numa opção acima pra confirmar — a cobertura marcada aqui já entra somada no lucro final.
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -354,20 +556,38 @@ export default function Operacoes() {
           <div style={{ padding: 30, textAlign: "center", color: "#52525b", fontSize: 12 }}>Nenhuma operação finalizada nesse mês ainda.</div>
         ) : (
           finalizadasDoMes.slice().reverse().map((o) => (
-            <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: "1px solid #1c1c1f" }}>
-              <div className="mono" style={{ fontSize: 11, color: "#52525b", width: 60, flexShrink: 0 }}>{o.data.slice(8, 10)}/{o.data.slice(5, 7)}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.descricao || "Sem descrição"}</div>
-                <div style={{ fontSize: 10.5, color: "#52525b" }}>
-                  {o.escolhida ? `Bateu: ${o.escolhida}` : (o.tipo === "multiplas" ? "Múltiplas casas" : o.tipo === "backlay" ? "Back x Lay" : o.tipo === "backdc" ? "Back + Dupla Chance" : o.tipo === "dg2up" ? "Duplo Green 2UP" : "Manual")}
-                  {o.resultado_final && ` · ${o.resultado_final}`}
+            <div key={o.id} style={{ borderBottom: "1px solid #1c1c1f" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}>
+                <div className="mono" style={{ fontSize: 11, color: "#52525b", width: 60, flexShrink: 0 }}>{o.data.slice(8, 10)}/{o.data.slice(5, 7)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.descricao || "Sem descrição"}</div>
+                  <div style={{ fontSize: 10.5, color: "#52525b" }}>
+                    {o.escolhida ? `Bateu: ${o.escolhida}` : (o.tipo === "multiplas" ? "Múltiplas casas" : o.tipo === "backlay" ? "Back x Lay" : o.tipo === "backdc" ? "Back + Dupla Chance" : o.tipo === "dg2up" ? "Duplo Green 2UP" : "Manual")}
+                    {o.resultado_final && ` · ${o.resultado_final}`}
+                    {o.cobertura_odd != null && <span style={{ color: "#34d399" }}> · cobertura: +{fmt(o.cobertura_lucro)}</span>}
+                  </div>
                 </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div className="mono" style={{ fontSize: 11, color: "#71717a" }}>Apostado: {fmt(o.apostado)}</div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: Number(o.lucro) >= 0 ? "#34d399" : "#fb7185" }}>{Number(o.lucro) >= 0 ? "+" : ""}{fmt(o.lucro)}</div>
+                </div>
+                <button
+                  onClick={() => (editandoCoberturaId === o.id ? setEditandoCoberturaId(null) : abrirEdicaoCobertura(o))}
+                  style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: o.cobertura_odd != null ? "rgba(52,211,153,.12)" : "#27292e", color: o.cobertura_odd != null ? "#34d399" : "#a1a1aa", border: "none", flexShrink: 0 }}
+                >
+                  {o.cobertura_odd != null ? "editar cobertura" : "+ cobertura"}
+                </button>
+                <button onClick={() => excluir(o.id)} style={{ background: "none", border: "none", color: "#3f3f46", flexShrink: 0 }}><Trash2 size={13} /></button>
               </div>
-              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div className="mono" style={{ fontSize: 11, color: "#71717a" }}>Apostado: {fmt(o.apostado)}</div>
-                <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: Number(o.lucro) >= 0 ? "#34d399" : "#fb7185" }}>{Number(o.lucro) >= 0 ? "+" : ""}{fmt(o.lucro)}</div>
-              </div>
-              <button onClick={() => excluir(o.id)} style={{ background: "none", border: "none", color: "#3f3f46", flexShrink: 0 }}><Trash2 size={13} /></button>
+
+              {editandoCoberturaId === o.id && (
+                <div style={{ padding: "0 14px 14px" }}>
+                  <CoberturaForm />
+                  <button onClick={() => salvarCobertura(o)} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
+                    Salvar cobertura
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabase";
-import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2, Calculator, DollarSign } from "lucide-react";
+import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2, Calculator, DollarSign, TrendingUp } from "lucide-react";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const fmt = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -24,6 +24,7 @@ const novaCasa = (nome = "") => ({
   conversao_pct: "100",
   teto: "",
   pagamento_antecipado: "",
+  selecao: "", // "mandante" | "empate" | "visitante" — pra conferência automática de resultado
   entradas: [novaEntrada()],
 });
 
@@ -267,6 +268,57 @@ export default function Calculadora() {
       lucroSeManterLiquido, lucroSeDuploGreenLiquido, lucroSeManterBruto, lucroSeDuploGreenBruto,
     };
   }, [dg, usdToBrl]);
+
+  const [lancamento, setLancamento] = useState("idle"); // idle | saving | saved
+  const lancarOperacao = async (descricao, tipo, apostado, opcoes, jogoInfo = null) => {
+    setLancamento("saving");
+    const { error } = await supabase.from("operacoes").insert({
+      data: new Date().toISOString().slice(0, 10),
+      descricao,
+      tipo,
+      apostado: Number(apostado) || 0,
+      lucro: 0,
+      status: "pendente",
+      opcoes,
+      evento_id: jogoInfo?.id || null,
+      evento_home: jogoInfo?.home || null,
+      evento_away: jogoInfo?.away || null,
+      evento_liga: jogoInfo?.liga || null,
+      evento_data: jogoInfo?.data || null,
+    });
+    setLancamento(error ? "idle" : "saved");
+    setTimeout(() => setLancamento("idle"), 1500);
+  };
+
+  // ---------- busca de jogo (pra conferência automática de resultado) ----------
+  const [jogo, setJogo] = useState(null); // { id, home, away, liga, data }
+  const [buscaTime, setBuscaTime] = useState("");
+  const [buscaData, setBuscaData] = useState(new Date().toISOString().slice(0, 10));
+  const [jogosEncontrados, setJogosEncontrados] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+
+  const buscarJogos = async () => {
+    if (!buscaTime.trim()) return;
+    setBuscando(true);
+    setJogosEncontrados([]);
+    try {
+      const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${buscaData}&s=Soccer`);
+      const data = await res.json();
+      const termo = buscaTime.trim().toLowerCase();
+      const achados = (data?.events || []).filter(
+        (e) => e.strHomeTeam?.toLowerCase().includes(termo) || e.strAwayTeam?.toLowerCase().includes(termo)
+      );
+      setJogosEncontrados(achados);
+    } catch (e) {
+      console.error("Erro ao buscar jogos", e);
+    }
+    setBuscando(false);
+  };
+
+  const selecionarJogo = (e) => {
+    setJogo({ id: e.idEvent, home: e.strHomeTeam, away: e.strAwayTeam, liga: e.strLeague, data: e.dateEvent });
+    setJogosEncontrados([]);
+  };
 
   const carregarSalvos = useCallback(async () => {
     const { data } = await supabase.from("calculos").select("*").order("atualizado_em", { ascending: false });
@@ -772,6 +824,17 @@ export default function Calculadora() {
                 {Math.abs(dgCalc.lucroSeManter - dgCalc.lucroSeDuploGreen) < 0.5 && (
                   <div style={{ marginTop: 10, fontSize: 11.5, color: "#34d399", textAlign: "center" }}>Lucro igual nos dois cenários ✓</div>
                 )}
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+                  <button
+                    onClick={() => lancarOperacao("Duplo Green 2UP", "dg2up", dg.investimento, [
+                      { label: "Manteve a vitória (PA)", lucro: dgCalc.lucroSeManter },
+                      { label: "Saiu Duplo Green", lucro: dgCalc.lucroSeDuploGreen },
+                    ])}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+                  >
+                    <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -817,9 +880,8 @@ export default function Calculadora() {
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>Dupla Chance (cobre o resto)</div>
                 <SeletorMoeda value={bdc.dcMoeda} onChange={(m) => updateBdc({ dcMoeda: m })} />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div style={{ marginBottom: 8 }}>
                 <Campo label="Odd ofertada (alvo)"><input type="number" step="0.01" value={bdc.dcOdd} onChange={(e) => updateBdc({ dcOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
-                <Campo label="Comissão (%)"><input type="number" step="0.01" value={bdc.dcComissao} onChange={(e) => updateBdc({ dcComissao: e.target.value })} className="input-field" /></Campo>
               </div>
 
               <div style={{ fontSize: 11, color: "#71717a", marginBottom: 6 }}>
@@ -904,6 +966,17 @@ export default function Calculadora() {
                 sub={bdcCalc.stakeTotal ? `${((bdcCalc.lucroSeDCGanha / bdcCalc.stakeTotal) * 100).toFixed(2)}%` : null}
                 color={bdcCalc.lucroSeDCGanha >= 0 ? "#34d399" : "#fb7185"}
               />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+              <button
+                onClick={() => lancarOperacao("Back + Dupla Chance", "backdc", bdcCalc.stakeTotal, [
+                  { label: "Back ganhou", lucro: bdcCalc.lucroSeBackGanha },
+                  { label: "Dupla Chance ganhou", lucro: bdcCalc.lucroSeDCGanha },
+                ])}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+              >
+                <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
+              </button>
             </div>
           </div>
         </div>
@@ -1040,6 +1113,17 @@ export default function Calculadora() {
                 color={blCalc.lucroSeNaoSair >= 0 ? "#34d399" : "#fb7185"}
               />
             </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+              <button
+                onClick={() => lancarOperacao("Back x Lay", "backlay", blCalc.apostaTotal, [
+                  { label: "Saiu (back ganhou)", lucro: blCalc.lucroSeSair },
+                  { label: "Não saiu (lay ganhou)", lucro: blCalc.lucroSeNaoSair },
+                ])}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+              >
+                <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -1056,6 +1140,51 @@ export default function Calculadora() {
         </button>
       </div>
 
+      {/* vínculo com o jogo (pra conferência automática do resultado depois) */}
+      <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14, marginBottom: 18 }}>
+        {jogo ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontSize: 13, color: "#e4e4e7" }}>
+              ⚽ <strong>{jogo.home}</strong> x <strong>{jogo.away}</strong>
+              <span style={{ color: "#71717a", marginLeft: 8, fontSize: 11.5 }}>{jogo.liga} · {jogo.data}</span>
+            </div>
+            <button onClick={() => setJogo(null)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#71717a", background: "none", border: "1px solid #27292e", borderRadius: 6, padding: "4px 9px" }}>
+              <X size={11} /> desvincular
+            </button>
+          </div>
+        ) : (
+          <>
+            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 6 }}>
+              Vincular a um jogo (pra conferir o resultado depois automaticamente)
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input type="text" value={buscaTime} onChange={(e) => setBuscaTime(e.target.value)} placeholder="nome de um dos times (ex: Itália)" className="input-field" style={{ flex: 1, minWidth: 160 }} />
+              <input type="date" value={buscaData} onChange={(e) => setBuscaData(e.target.value)} className="input-field" style={{ width: 150 }} />
+              <button onClick={buscarJogos} disabled={buscando} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
+                {buscando ? "buscando…" : "Buscar"}
+              </button>
+            </div>
+            {jogosEncontrados.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                {jogosEncontrados.map((e) => (
+                  <button
+                    key={e.idEvent}
+                    onClick={() => selecionarJogo(e)}
+                    style={{ textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
+                  >
+                    <strong>{e.strHomeTeam}</strong> x <strong>{e.strAwayTeam}</strong>
+                    <span style={{ color: "#71717a", marginLeft: 6 }}>{e.strLeague} · {e.dateEvent}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {!buscando && jogosEncontrados.length === 0 && buscaTime && (
+              <div style={{ fontSize: 11, color: "#52525b", marginTop: 6 }}>Clica em "Buscar" pra ver os jogos encontrados nessa data.</div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* cards das casas */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 14, marginBottom: 18 }}>
         {casas.map((c, idx) => (
@@ -1069,6 +1198,27 @@ export default function Calculadora() {
             </div>
 
             <input value={c.nome} onChange={(e) => updateCasa(c.id, { nome: e.target.value })} placeholder="nome da casa" className="input-field" style={{ marginBottom: 10, fontWeight: 600, color: "#f4f4f5" }} />
+
+            {jogo && (
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 3 }}>Essa casa é...</label>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[
+                    { v: "mandante", label: jogo.home },
+                    { v: "empate", label: "Empate" },
+                    { v: "visitante", label: jogo.away },
+                  ].map((opt) => (
+                    <button
+                      key={opt.v}
+                      onClick={() => updateCasa(c.id, { selecao: c.selecao === opt.v ? "" : opt.v })}
+                      style={{ flex: 1, padding: "5px 4px", borderRadius: 6, fontSize: 10.5, fontWeight: 600, border: `1px solid ${c.selecao === opt.v ? "#fbbf24" : "#27292e"}`, background: c.selecao === opt.v ? "rgba(251,191,36,.12)" : "transparent", color: c.selecao === opt.v ? "#fbbf24" : "#71717a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
               <Campo label="Comissão (%)"><input type="number" step="0.01" value={c.comissao} onChange={(e) => updateCasa(c.id, { comissao: e.target.value })} placeholder="0" className="input-field" /></Campo>
@@ -1216,6 +1366,21 @@ export default function Calculadora() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+          <button
+            onClick={() => lancarOperacao(
+              jogo ? `${jogo.home} x ${jogo.away}` : (casas.map((c) => c.nome).filter(Boolean).join(" x ") || "Múltiplas casas"),
+              "multiplas",
+              resultados.stakeTotal,
+              resultados.linhas.map((l, i) => ({ label: l.nome || "Casa", lucro: l.lucro, selecao: casas[i]?.selecao || null })),
+              jogo
+            )}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+          >
+            <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
+          </button>
         </div>
       </div>
       </>

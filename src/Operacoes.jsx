@@ -253,7 +253,7 @@ export default function Operacoes() {
       const corrigida = stakesCorrigidas[o.label];
       const stakeBRL = corrigida !== undefined && corrigida !== "" ? Number(corrigida) : (temExato ? Number(o.stakeBRL) : apostadoTotal / n);
       const payoutBRL = temExato ? Number(o.payoutBRL) : Number(o.lucro || 0) + apostadoTotal;
-      return { ...o, stakeBRL, payoutBRL, estimado: !temExato && corrigida === undefined };
+      return { ...o, stakeBRL, payoutBRL, temExato, estimado: !temExato };
     });
   };
 

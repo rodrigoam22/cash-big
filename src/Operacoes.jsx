@@ -137,14 +137,16 @@ export default function Operacoes() {
   const [editandoCoberturaId, setEditandoCoberturaId] = useState(null);
   const [editandoNomeId, setEditandoNomeId] = useState(null);
   const [novoNome, setNovoNome] = useState("");
+  const [novaData, setNovaData] = useState("");
 
   const abrirEdicaoNome = (op) => {
     setEditandoNomeId(op.id);
     setNovoNome(op.descricao || "");
+    setNovaData(op.data);
   };
 
   const salvarNome = async (op) => {
-    await supabase.from("operacoes").update({ descricao: novoNome.trim() || null }).eq("id", op.id);
+    await supabase.from("operacoes").update({ descricao: novoNome.trim() || null, data: novaData }).eq("id", op.id);
     setEditandoNomeId(null);
     carregar();
   };
@@ -235,10 +237,24 @@ export default function Operacoes() {
   };
 
   // pontas: têm stakeBRL/payoutBRL (só op lançada pela Múltiplas casas, depois dessa atualização)
-  const temDadosDetalhados = (op) => (op.opcoes || []).every((o) => o.stakeBRL != null && o.payoutBRL != null);
+  // operações antigas não têm stake/payout salvo por ponta — estima com base no apostado total
+  // e no lucro "se essa ponta bater" que já tínhamos guardado, pra não travar o void
+  const pontasComValores = (op) => {
+    const opcoes = op.opcoes || [];
+    const n = opcoes.length || 1;
+    const apostadoTotal = Number(op.apostado || 0);
+    return opcoes.map((o) => {
+      const temExato = o.stakeBRL != null && o.payoutBRL != null;
+      const stakeBRL = temExato ? Number(o.stakeBRL) : apostadoTotal / n;
+      const payoutBRL = temExato ? Number(o.payoutBRL) : Number(o.lucro || 0) + apostadoTotal;
+      return { ...o, stakeBRL, payoutBRL, estimado: !temExato };
+    });
+  };
+
+  const temEstimativa = (op) => pontasComValores(op).some((o) => o.estimado);
 
   const calcularLucroDetalhado = (op) => {
-    const opcoes = op.opcoes || [];
+    const opcoes = pontasComValores(op);
     let total = 0;
     for (const o of opcoes) {
       const st = statusPontas[o.label] || "perdeu";
@@ -272,14 +288,17 @@ export default function Operacoes() {
 
   const PainelResolver = ({ op }) => (
     <div>
-      {temDadosDetalhados(op) && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-          <button onClick={() => setModoDetalhado(false)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${!modoDetalhado ? "#fbbf24" : "#27292e"}`, background: !modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: !modoDetalhado ? "#fbbf24" : "#71717a" }}>
-            Simples (uma bateu)
-          </button>
-          <button onClick={() => setModoDetalhado(true)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${modoDetalhado ? "#fbbf24" : "#27292e"}`, background: modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: modoDetalhado ? "#fbbf24" : "#71717a" }}>
-            Detalhado (void/anulada)
-          </button>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <button onClick={() => setModoDetalhado(false)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${!modoDetalhado ? "#fbbf24" : "#27292e"}`, background: !modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: !modoDetalhado ? "#fbbf24" : "#71717a" }}>
+          Simples (uma bateu)
+        </button>
+        <button onClick={() => setModoDetalhado(true)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: `1px solid ${modoDetalhado ? "#fbbf24" : "#27292e"}`, background: modoDetalhado ? "rgba(251,191,36,.12)" : "transparent", color: modoDetalhado ? "#fbbf24" : "#71717a" }}>
+          Detalhado (void/anulada)
+        </button>
+      </div>
+      {modoDetalhado && temEstimativa(op) && (
+        <div style={{ fontSize: 10.5, color: "#fbbf24", marginBottom: 8 }}>
+          ⚠ Essa operação é antiga e não guardou a stake/retorno exato de cada ponta — os valores abaixo são estimados (apostado dividido igual entre as pontas). Confere se bate antes de confirmar.
         </div>
       )}
 
@@ -538,6 +557,7 @@ export default function Operacoes() {
                   <div style={{ flex: 1, minWidth: 160 }}>
                     {editandoNomeId === op.id ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="input-field" style={{ fontSize: 12.5, padding: "4px 8px", width: 130 }} />
                         <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} onKeyDown={(e) => e.key === "Enter" && salvarNome(op)} className="input-field" style={{ fontSize: 12.5, padding: "4px 8px", maxWidth: 220 }} />
                         <button onClick={() => salvarNome(op)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "#fbbf24", color: "#0b0d10", border: "none" }}>salvar</button>
                         <button onClick={() => setEditandoNomeId(null)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "none", color: "#71717a", border: "1px solid #27292e" }}>cancelar</button>
@@ -588,6 +608,7 @@ export default function Operacoes() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {editandoNomeId === o.id ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="input-field" style={{ fontSize: 12.5, padding: "4px 8px", width: 130 }} />
                       <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} onKeyDown={(e) => e.key === "Enter" && salvarNome(o)} className="input-field" style={{ fontSize: 12.5, padding: "4px 8px", maxWidth: 200 }} />
                       <button onClick={() => salvarNome(o)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "#fbbf24", color: "#0b0d10", border: "none" }}>salvar</button>
                       <button onClick={() => setEditandoNomeId(null)} style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: "none", color: "#71717a", border: "1px solid #27292e" }}>cancelar</button>

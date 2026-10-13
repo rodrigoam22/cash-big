@@ -25,7 +25,6 @@ export default function Operacoes() {
   const [resolvendoId, setResolvendoId] = useState(null);
   const [lucroManual, setLucroManual] = useState("");
   const [lucroManualMoeda, setLucroManualMoeda] = useState("BRL");
-  const [verificando, setVerificando] = useState(null);
 
   // ---------- cotação (mesma lógica/cache da Calculadora) ----------
   const [rate, setRate] = useState(null);
@@ -498,46 +497,6 @@ export default function Operacoes() {
     </div>
   );
 
-  // ---------- verificação automática de placar (TheSportsDB) ----------
-  const verificarResultado = async (op) => {
-    if (!op.evento_id) return;
-    setVerificando(op.id);
-    try {
-      const res = await fetch(`/api/eventos?action=placar&id=${op.evento_id}`);
-      const ev = await res.json();
-      const finalizado = ev?.status === "FINISHED";
-      const homeScore = ev?.score?.fullTime?.home;
-      const awayScore = ev?.score?.fullTime?.away;
-
-      if (!finalizado || homeScore == null || awayScore == null) {
-        alert("O jogo ainda não tem placar final registrado. Tenta de novo mais tarde.");
-        setVerificando(null);
-        return;
-      }
-
-      const resultado = homeScore > awayScore ? "mandante" : homeScore < awayScore ? "visitante" : "empate";
-      const resultadoStr = `${homeScore}-${awayScore}`;
-      const opcoes = Array.isArray(op.opcoes) ? op.opcoes : [];
-      const vencedora = opcoes.find((o) => o.selecao === resultado);
-
-      if (vencedora) {
-        await supabase.from("operacoes").update({
-          status: "finalizado",
-          escolhida: vencedora.label,
-          lucro: vencedora.lucro,
-          resultado_final: resultadoStr,
-        }).eq("id", op.id);
-      } else {
-        await supabase.from("operacoes").update({ resultado_final: resultadoStr }).eq("id", op.id);
-        alert(`Placar encontrado (${resultadoStr}), mas nenhuma casa estava marcada como "${resultado}". Resolve manualmente.`);
-      }
-      carregar();
-    } catch (e) {
-      console.error("Erro ao verificar resultado", e);
-      alert("Não consegui buscar o resultado agora. Tenta de novo em instantes.");
-    }
-    setVerificando(null);
-  };
 
   const Chart = () => {
     const w = 100, h = 36;
@@ -629,11 +588,6 @@ export default function Operacoes() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {pendente ? (
                 <>
-                  {o.evento_id && (
-                    <button onClick={() => verificarResultado(o)} disabled={verificando === o.id} style={{ ...btn, display: "flex", alignItems: "center", gap: 5, background: "rgba(45,212,191,.14)", color: "#2dd4bf", border: "1px solid rgba(45,212,191,.35)" }}>
-                      <RefreshCw size={12} /> {verificando === o.id ? "verificando…" : "Verificar resultado"}
-                    </button>
-                  )}
                   <button onClick={() => abrirResolver(o)} style={{ ...btn, background: "linear-gradient(135deg,#00e676,#00b85c)", color: "#0b0e1d", fontWeight: 700, border: "none" }}>Definir resultados</button>
                 </>
               ) : (

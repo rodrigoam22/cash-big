@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabase";
+import { buscarCotacao, lerCache } from "./cotacao";
 import { ChevronDown, ChevronUp, X, ChevronLeft, ChevronRight, TrendingUp, Activity, Trash2, Plus, Check, RefreshCw, Clock, Pencil } from "lucide-react";
 
-const RATE_CACHE_KEY = "cashbig_usdbrl_rate";
-const RATE_MAX_AGE = 24 * 60 * 60 * 1000;
 
 const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtUSD = (v) => (Number(v) || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -32,21 +31,13 @@ export default function Operacoes() {
   const [rate, setRate] = useState(null);
   const [moeda, setMoeda] = useState("USD");
   useEffect(() => {
-    (async () => {
-      try {
-        const cached = JSON.parse(localStorage.getItem(RATE_CACHE_KEY) || "null");
-        if (cached && Date.now() - cached.updatedAt < RATE_MAX_AGE) { setRate(cached); return; }
-      } catch {}
-      try {
-        const res = await fetch("https://open.er-api.com/v6/latest/USD");
-        const data = await res.json();
-        if (data?.rates?.BRL) {
-          const payload = { value: data.rates.BRL, updatedAt: Date.now() };
-          setRate(payload);
-          localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(payload));
-        }
-      } catch (e) { console.error("Erro ao buscar cotação", e); }
-    })();
+    const atualizar = async (forcar) => {
+      if (!forcar) { const c = lerCache(); if (c) { setRate(c); return; } }
+      try { setRate(await buscarCotacao()); } catch (e) { console.error("Erro ao buscar cotação", e); }
+    };
+    atualizar(false);
+    const t = setInterval(() => atualizar(true), 5 * 60 * 1000);
+    return () => clearInterval(t);
   }, []);
   const usdToBrl = rate?.value || 5;
   const fmt = (v) => (moeda === "USD" ? fmtUSD((Number(v) || 0) / usdToBrl) : fmtBRL(v));

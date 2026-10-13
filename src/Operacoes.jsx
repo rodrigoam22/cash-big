@@ -15,6 +15,9 @@ export default function Operacoes() {
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth());
   const [operacoes, setOperacoes] = useState([]);
+  const [todasFin, setTodasFin] = useState([]); // todas as finalizadas, de todos os meses (pra média geral)
+  const [diaSel, setDiaSel] = useState(null); // "01".."31"
+  const [escopoMedia, setEscopoMedia] = useState("total"); // "mes" | "total"
   const [loading, setLoading] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL" }); // modo: "finalizada" | "pendente"
@@ -53,6 +56,8 @@ export default function Operacoes() {
     setLoading(true);
     const { data } = await supabase.from("operacoes").select("*").gte("data", inicioMes).lte("data", fimMes).order("data", { ascending: true });
     setOperacoes(data || []);
+    const { data: todas } = await supabase.from("operacoes").select("id,data,tipo,apostado,lucro,fora_media").eq("status", "finalizado");
+    setTodasFin(todas || []);
     setLoading(false);
   }, [inicioMes, fimMes]);
 
@@ -64,6 +69,22 @@ export default function Operacoes() {
     if (novoMes > 11) { novoMes = 0; novoAno += 1; }
     setMes(novoMes); setAno(novoAno);
   };
+
+  const mediaPerda = useMemo(() => {
+    const base = escopoMedia === "mes" ? todasFin.filter((o) => o.data >= inicioMes && o.data <= fimMes) : todasFin;
+    const contadas = base.filter((o) => !o.fora_media);
+    const soma = (arr, k) => arr.reduce((a, o) => a + Number(o[k] || 0), 0);
+    const lucro = soma(contadas, "lucro");
+    const apostado = soma(contadas, "apostado");
+    const porTipo = {};
+    contadas.forEach((o) => {
+      const t = o.tipo || "manual";
+      porTipo[t] = porTipo[t] || { n: 0, lucro: 0, apostado: 0 };
+      porTipo[t].n += 1; porTipo[t].lucro += Number(o.lucro || 0); porTipo[t].apostado += Number(o.apostado || 0);
+    });
+    return { n: contadas.length, fora: base.length - contadas.length, lucro, apostado, pct: apostado ? (lucro / apostado) * 100 : 0, porJogo: contadas.length ? lucro / contadas.length : 0, porTipo };
+  }, [todasFin, escopoMedia, inicioMes, fimMes]);
+  const NOME_TIPO = { multiplas: "Múltiplas", backlay: "Back x Lay", backdc: "Back + DC", dg2up: "Duplo Green", manual: "Manual" };
 
   const resumo = useMemo(() => {
     const finalizadas = operacoes.filter((o) => o.status === "finalizado");
@@ -158,6 +179,12 @@ export default function Operacoes() {
     setEditandoNomeId(op.id);
     setNovoNome(op.descricao || "");
     setNovaData(op.data);
+  };
+
+  const alternarForaMedia = async (op) => {
+    const { error } = await supabase.from("operacoes").update({ fora_media: !op.fora_media }).eq("id", op.id);
+    if (error) { alert("Erro ao salvar (rodou o SQL migration_fora_media?): " + error.message); return; }
+    carregar();
   };
 
   const salvarNome = async (op) => {
@@ -599,6 +626,42 @@ export default function Operacoes() {
         </div>
       </div>
 
+      {/* média de perda (só operações que contam) */}
+      <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 16, marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#71717a" }}>Perda média por operação <span style={{ color: "#52525b" }}>(sem as marcadas como "fora da média")</span></div>
+          <div style={{ display: "flex", gap: 2, background: "#0b0d10", border: "1px solid #27292e", borderRadius: 6, padding: 2 }}>
+            {[["total", "Total"], ["mes", "Mês"]].map(([v, l]) => (
+              <button key={v} onClick={() => setEscopoMedia(v)} style={{ padding: "3px 9px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: escopoMedia === v ? "#fbbf24" : "transparent", color: escopoMedia === v ? "#0b0d10" : "#71717a" }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div>
+            <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: mediaPerda.pct >= 0 ? "#34d399" : "#fb7185" }}>{mediaPerda.pct >= 0 ? "+" : ""}{mediaPerda.pct.toFixed(2)}%</div>
+            <div style={{ fontSize: 10.5, color: "#52525b" }}>do apostado (ponderada)</div>
+          </div>
+          <div>
+            <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: mediaPerda.porJogo >= 0 ? "#34d399" : "#fb7185" }}>{mediaPerda.porJogo >= 0 ? "+" : ""}{fmt(mediaPerda.porJogo)}</div>
+            <div style={{ fontSize: 10.5, color: "#52525b" }}>por jogo</div>
+          </div>
+          <div>
+            <div className="mono" style={{ fontSize: 14, color: "#e4e4e7" }}>{mediaPerda.n} <span style={{ color: "#52525b", fontSize: 11 }}>contadas</span></div>
+            <div style={{ fontSize: 10.5, color: "#52525b" }}>{mediaPerda.fora} fora da média</div>
+          </div>
+        </div>
+        {Object.keys(mediaPerda.porTipo).length > 0 && (
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, paddingTop: 10, borderTop: "1px solid #1c1c1f" }}>
+            {Object.entries(mediaPerda.porTipo).map(([t, v]) => (
+              <div key={t} className="mono" style={{ fontSize: 11, color: "#71717a" }}>
+                {NOME_TIPO[t] || t}: <span style={{ color: v.lucro >= 0 ? "#34d399" : "#fb7185" }}>{v.apostado ? ((v.lucro / v.apostado) * 100).toFixed(2) : "0.00"}%</span> <span style={{ color: "#52525b" }}>({v.n})</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+
       <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 16, marginBottom: 18 }}>
         <div style={{ fontSize: 11, color: "#71717a", marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}><TrendingUp size={12} /> Evolução do Lucro</div>
         <Chart />
@@ -619,8 +682,9 @@ export default function Operacoes() {
             const det = resumo.porDiaDetalhe[diaStr];
             const temDados = !!det;
             const positivo = temDados && det.lucro >= 0;
+            const selecionado = diaSel === diaStr;
             return (
-              <div key={diaNum} style={{ borderRadius: 8, padding: "8px 4px", minHeight: 58, textAlign: "center", background: temDados ? (positivo ? "rgba(16,185,129,.08)" : "rgba(244,63,94,.08)") : "rgba(255,255,255,.015)", border: `1px solid ${temDados ? (positivo ? "rgba(16,185,129,.2)" : "rgba(244,63,94,.2)") : "#1c1c1f"}` }}>
+              <div key={diaNum} onClick={() => setDiaSel(selecionado ? null : diaStr)} style={{ cursor: "pointer", outline: selecionado ? "2px solid #fbbf24" : "none", borderRadius: 8, padding: "8px 4px", minHeight: 58, textAlign: "center", background: temDados ? (positivo ? "rgba(16,185,129,.08)" : "rgba(244,63,94,.08)") : "rgba(255,255,255,.015)", border: `1px solid ${temDados ? (positivo ? "rgba(16,185,129,.2)" : "rgba(244,63,94,.2)") : "#1c1c1f"}` }}>
                 <div style={{ fontSize: 11, color: temDados ? "#e4e4e7" : "#52525b", fontWeight: 600 }}>{diaNum}</div>
                 {temDados && (
                   <>
@@ -632,6 +696,36 @@ export default function Operacoes() {
             );
           })}
         </div>
+        {diaSel && (() => {
+          const doDia = operacoes.filter((o) => o.data.slice(8, 10) === diaSel);
+          const fin = doDia.filter((o) => o.status === "finalizado");
+          const somaLucro = fin.reduce((a, o) => a + Number(o.lucro || 0), 0);
+          const nomeTipo = (t) => (t === "multiplas" ? "Múltiplas" : t === "backlay" ? "Back x Lay" : t === "backdc" ? "Back + DC" : t === "dg2up" ? "Duplo Green" : "Manual");
+          return (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #1c1c1f" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: "#e4e4e7", fontWeight: 600 }}>Dia {diaSel}/{pad2(mes + 1)} · {doDia.length} op.</div>
+                <div className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: somaLucro >= 0 ? "#34d399" : "#fb7185" }}>{somaLucro >= 0 ? "+" : ""}{fmt(somaLucro)}</div>
+              </div>
+              {doDia.length === 0 ? (
+                <div style={{ fontSize: 11.5, color: "#52525b" }}>Nenhuma operação nesse dia.</div>
+              ) : doDia.map((o) => (
+                <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid #1c1c1f" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, color: "#e4e4e7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.descricao || "Sem descrição"}</div>
+                    <div style={{ fontSize: 10.5, color: "#52525b" }}>{nomeTipo(o.tipo)}{o.escolhida ? ` · Bateu: ${o.escolhida}` : ""}{o.fora_media ? " · fora da média" : ""}</div>
+                  </div>
+                  <div className="mono" style={{ fontSize: 11, color: "#71717a" }}>{fmt(o.apostado)}</div>
+                  {o.status === "finalizado" ? (
+                    <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, minWidth: 80, textAlign: "right", color: Number(o.lucro) >= 0 ? "#34d399" : "#fb7185" }}>{Number(o.lucro) >= 0 ? "+" : ""}{fmt(o.lucro)}</div>
+                  ) : (
+                    <div style={{ fontSize: 10.5, color: "#fbbf24", minWidth: 80, textAlign: "right" }}>pendente</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* pendentes */}
@@ -736,6 +830,13 @@ export default function Operacoes() {
                   style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: o.cobertura_odd != null ? "rgba(52,211,153,.12)" : "#27292e", color: o.cobertura_odd != null ? "#34d399" : "#a1a1aa", border: "none", flexShrink: 0 }}
                 >
                   {o.cobertura_odd != null ? "editar cobertura" : "+ cobertura"}
+                </button>
+                <button
+                  onClick={() => alternarForaMedia(o)}
+                  title="Marcar operações de bônus ou que deram lucro por duplo/handicap pra não entrarem na perda média"
+                  style={{ fontSize: 10.5, padding: "4px 8px", borderRadius: 6, background: o.fora_media ? "rgba(251,191,36,.12)" : "#27292e", color: o.fora_media ? "#fbbf24" : "#a1a1aa", border: "none", flexShrink: 0 }}
+                >
+                  {o.fora_media ? "fora da média" : "conta na média"}
                 </button>
                 <button onClick={() => excluir(o.id)} style={{ background: "none", border: "none", color: "#3f3f46", flexShrink: 0 }}><Trash2 size={13} /></button>
               </div>

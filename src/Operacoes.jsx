@@ -326,6 +326,20 @@ export default function Operacoes() {
     carregar();
   };
 
+  // detalhe da ponta (odd + valor apostado) pra mostrar na hora de resolver
+  const moedaTxt = (v, m) => (m === "USD" ? fmtUSD(v) : m === "EUR" ? (Number(v) || 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" }) : fmtBRL(v));
+  const detalhePonta = (o) => {
+    const partes = [];
+    if (o.odd != null && Number(o.odd) > 0) partes.push(`odd ${Number(o.odd).toFixed(2)}`);
+    if (o.stakeNative != null && o.moeda) {
+      partes.push(`stake ${moedaTxt(o.stakeNative, o.moeda)}${o.moeda !== "BRL" && o.stakeBRL != null ? ` (≈ ${fmtBRL(o.stakeBRL)})` : ""}`);
+    } else if (o.stakeBRL != null) {
+      partes.push(`stake ${fmtBRL(o.stakeBRL)}`);
+    }
+    if (o.freebet) partes.push("freebet");
+    return partes.join(" · ");
+  };
+
   const PainelResolver = ({ op }) => (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -353,7 +367,10 @@ export default function Operacoes() {
             {pontasComValores(op).map((o, i) => (
               <div key={i} style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12.5, color: "#e4e4e7" }}>{o.label}</span>
+                  <div>
+                    <div style={{ fontSize: 12.5, color: "#e4e4e7" }}>{o.label}</div>
+                    {detalhePonta(o) && <div className="mono" style={{ fontSize: 10.5, color: "#71717a", marginTop: 2 }}>{detalhePonta(o)}</div>}
+                  </div>
                   <div style={{ display: "flex", gap: 4 }}>
                     {[
                       { v: "ganhou", label: "Ganhou", cor: "#34d399" },
@@ -417,7 +434,10 @@ export default function Operacoes() {
                 onClick={() => confirmarResolucao(op, o, lucroManual)}
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
               >
-                <span>{o.label}</span>
+                <span style={{ textAlign: "left" }}>
+                  {o.label}
+                  {detalhePonta(o) && <div className="mono" style={{ fontSize: 10.5, color: "#71717a", marginTop: 2 }}>{detalhePonta(o)}</div>}
+                </span>
                 <span className="mono" style={{ color: o.lucro >= 0 ? "#34d399" : "#fb7185" }}>{fmt(o.lucro)}</span>
               </button>
             ))}

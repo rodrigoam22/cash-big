@@ -161,9 +161,32 @@ export default function Calculadora() {
     dcCashbackAtivo: false, dcCashbackPct: "20", dcConversaoPct: "100", dcTeto: "",
   });
   const updateBdc = (patch) => setBdc((prev) => ({ ...prev, ...patch }));
-  const addDcEntrada = () => setBdc((prev) => ({ ...prev, dcEntradas: [...prev.dcEntradas, novaEntrada()] }));
+  const addDcEntrada = () => setBdc((prev) => ({ ...prev, dcEntradas: [...prev.dcEntradas, { ...novaEntrada(), moeda: prev.dcMoeda }] }));
   const removeDcEntrada = (id) => setBdc((prev) => ({ ...prev, dcEntradas: prev.dcEntradas.filter((e) => e.id !== id) }));
   const updateDcEntrada = (id, patch) => setBdc((prev) => ({ ...prev, dcEntradas: prev.dcEntradas.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
+
+  // calcula a stake (na moeda do preenchimento) que deixa o lucro igual nos dois cenários,
+  // dado o Back e os OUTROS preenchimentos já lançados
+  const equilibrarDcEntrada = (id) => {
+    const e = bdc.dcEntradas.find((x) => x.id === id);
+    if (!e) return;
+    const oddX = Number(e.odd || bdc.dcOdd || 0);
+    if (!oddX) return;
+    const com = Number(bdc.dcComissao || 0) / 100;
+    const mX = 1 + (oddX - 1) * (1 - com);
+    const B = (Number(bdc.backStake || 0)) * fator(bdc.backMoeda);
+    const mBack = bdc.freebet ? (Number(bdc.backOdd || 0) - 1) * (1 - Number(bdc.backComissao || 0) / 100) : 1 + (Number(bdc.backOdd || 0) - 1) * (1 - Number(bdc.backComissao || 0) / 100);
+    const cB = bdc.cashbackAtivo ? (Number(bdc.cashbackPct || 0) / 100) * (Number(bdc.conversaoPct || 0) / 100) : 0;
+    const cD = bdc.dcCashbackAtivo ? (Number(bdc.dcCashbackPct || 0) / 100) * (Number(bdc.dcConversaoPct || 0) / 100) : 0;
+    const outros = bdc.dcEntradas.filter((x) => x.id !== id);
+    const S0 = outros.reduce((acc, x) => acc + Number(x.stake || 0) * fator(x.moeda || bdc.dcMoeda), 0);
+    const W0 = outros.reduce((acc, x) => acc + Number(x.stake || 0) * fator(x.moeda || bdc.dcMoeda) * (1 + (Number(x.odd || 0) - 1) * (1 - com)), 0);
+    const denom = mX - cD;
+    if (denom <= 0) return;
+    const xBRL = (B * (mBack - cB) + S0 * cD - W0) / denom;
+    const fx = fator(e.moeda || bdc.dcMoeda);
+    updateDcEntrada(id, { odd: e.odd || bdc.dcOdd, stake: Math.max(0, fx ? xBRL / fx : 0).toFixed(2) });
+  };
 
   const bdcCalc = useMemo(() => {
     const backFator = fator(bdc.backMoeda);
@@ -190,18 +213,20 @@ export default function Calculadora() {
     const dcStakeAutoBRL = kDCAlvo > 0 ? (backStakeBRL * kBack) / kDCAlvo : 0;
     const dcStakeAutoNative = dcFator ? dcStakeAutoBRL / dcFator : 0;
 
-    // odd média real dos preenchimentos (fills) já conseguidos
-    const totalPreenchidoNative = bdc.dcEntradas.reduce((acc, e) => acc + Number(e.stake || 0), 0);
-    const somaPonderada = bdc.dcEntradas.reduce((acc, e) => acc + Number(e.stake || 0) * Number(e.odd || 0), 0);
-    const temPreenchimento = totalPreenchidoNative > 0;
-    const dcOddMedia = temPreenchimento ? somaPonderada / totalPreenchidoNative : dcOddAlvo;
+    // preenchimentos reais: cada um com sua moeda (tudo convertido pra BRL)
+    const fillsBRL = bdc.dcEntradas.map((e) => ({ stakeBRL: Number(e.stake || 0) * fator(e.moeda || bdc.dcMoeda), odd: Number(e.odd || 0) }));
+    const totalPreenchidoBRL = fillsBRL.reduce((acc, f) => acc + f.stakeBRL, 0);
+    const somaPonderada = fillsBRL.reduce((acc, f) => acc + f.stakeBRL * f.odd, 0);
+    const temPreenchimento = totalPreenchidoBRL > 0;
+    const dcOddMedia = temPreenchimento ? somaPonderada / totalPreenchidoBRL : dcOddAlvo;
+    const totalPreenchidoNative = dcFator ? totalPreenchidoBRL / dcFator : 0;
 
-    const dcStakeNative = temPreenchimento ? totalPreenchidoNative : dcStakeAutoNative;
+    const dcStakeBRL = temPreenchimento ? totalPreenchidoBRL : dcStakeAutoBRL;
     const dcOddUsada = temPreenchimento ? dcOddMedia : dcOddAlvo;
     const mDCUsada = 1 + (dcOddUsada - 1) * (1 - dcComissao / 100);
-    const dcStakeBRL = dcStakeNative * dcFator;
 
-    const faltandoAtribuirNative = Math.max(0, dcStakeAutoNative - totalPreenchidoNative);
+    const faltandoAtribuirBRL = Math.max(0, dcStakeAutoBRL - totalPreenchidoBRL);
+    const faltandoAtribuirNative = dcFator ? faltandoAtribuirBRL / dcFator : 0;
 
     const stakeTotal = (bdc.freebet ? 0 : backStakeBRL) + dcStakeBRL;
 
@@ -218,7 +243,7 @@ export default function Calculadora() {
 
     return {
       dcStakeAutoNative, dcStakeBRL, stakeTotal, lucroSeBackGanha, lucroSeDCGanha, cashbackBackValor, cashbackDCValor,
-      dcOddMedia, temPreenchimento, totalPreenchidoNative, faltandoAtribuirNative,
+      dcOddMedia, temPreenchimento, totalPreenchidoNative, totalPreenchidoBRL, faltandoAtribuirNative, faltandoAtribuirBRL, dcStakeAutoBRL,
       backStakeBRLReal: bdc.freebet ? 0 : backStakeBRL, payoutBack, payoutDC,
     };
   }, [bdc, usdToBrl, eurToBrl]);
@@ -384,7 +409,7 @@ export default function Calculadora() {
           teto: bdc.teto === "" ? null : bdc.teto,
           dc_odd: bdc.dcOdd === "" ? null : bdc.dcOdd,
           dc_comissao: bdc.dcComissao === "" ? null : bdc.dcComissao,
-          dc_entradas: bdc.dcEntradas.map((e) => ({ odd: e.odd, stake: e.stake })),
+          dc_entradas: bdc.dcEntradas.map((e) => ({ odd: e.odd, stake: e.stake, moeda: e.moeda || bdc.dcMoeda })),
           dc_moeda: bdc.dcMoeda,
           dc_cashback_ativo: bdc.dcCashbackAtivo,
           dc_cashback_pct: bdc.dcCashbackPct === "" ? null : bdc.dcCashbackPct,
@@ -486,7 +511,7 @@ export default function Calculadora() {
         dcOdd: calc.dc_odd ?? "",
         dcComissao: calc.dc_comissao ?? "0",
         dcEntradas: Array.isArray(calc.dc_entradas)
-          ? calc.dc_entradas.map((e) => ({ id: uid(), odd: e.odd ?? "", stake: e.stake ?? "" }))
+          ? calc.dc_entradas.map((e) => ({ id: uid(), odd: e.odd ?? "", stake: e.stake ?? "", moeda: e.moeda || calc.dc_moeda || "BRL" }))
           : [],
         dcMoeda: calc.dc_moeda ?? "BRL",
         cashbackAtivo: !!calc.cashback_ativo,
@@ -886,6 +911,7 @@ export default function Calculadora() {
 
               <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 6 }}>
                 Sugestão de stake total: <span className="mono" style={{ color: "#00e676" }}>{fmtMoeda(bdcCalc.dcStakeAutoNative, bdc.dcMoeda)}</span>
+                {bdc.dcMoeda !== "BRL" && <span className="mono" style={{ color: "#6b7099" }}> (≈ {fmt(bdcCalc.dcStakeAutoBRL)})</span>}
               </div>
 
               <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 4 }}>
@@ -893,9 +919,11 @@ export default function Calculadora() {
               </label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
                 {bdc.dcEntradas.map((e) => (
-                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <input type="number" step="0.01" value={e.odd} onChange={(ev) => updateDcEntrada(e.id, { odd: ev.target.value })} placeholder="odd" className="input-field" style={{ width: 70 }} />
-                    <input type="number" step="0.01" value={e.stake} onChange={(ev) => updateDcEntrada(e.id, { stake: ev.target.value })} placeholder="stake" className="input-field" style={{ flex: 1 }} />
+                    <input type="number" step="0.01" value={e.stake} onChange={(ev) => updateDcEntrada(e.id, { stake: ev.target.value })} placeholder="stake" className="input-field" style={{ flex: 1, minWidth: 90 }} />
+                    <SeletorMoeda value={e.moeda || bdc.dcMoeda} onChange={(m) => updateDcEntrada(e.id, { moeda: m })} />
+                    <button onClick={() => equilibrarDcEntrada(e.id)} title="calcular a stake que equilibra o lucro entre Back e Dupla Chance, na moeda desse preenchimento" style={{ background: "none", border: "none", color: "#8b90b3", padding: 0 }}><Calculator size={14} /></button>
                     <button onClick={() => removeDcEntrada(e.id)} style={{ background: "none", border: "none", color: "#4a5080" }}><X size={13} /></button>
                   </div>
                 ))}
@@ -906,12 +934,12 @@ export default function Calculadora() {
 
               {bdcCalc.temPreenchimento ? (
                 <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 8 }} className="mono">
-                  Odd média conseguida: <span style={{ color: "#e4e4e7" }}>{bdcCalc.dcOddMedia.toFixed(4)}</span> · Preenchido: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(bdcCalc.totalPreenchidoNative, bdc.dcMoeda)}</span>
+                  Odd média conseguida: <span style={{ color: "#e4e4e7" }}>{bdcCalc.dcOddMedia.toFixed(4)}</span> · Preenchido: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(bdcCalc.totalPreenchidoNative, bdc.dcMoeda)}</span>{bdc.dcMoeda !== "BRL" && <span style={{ color: "#6b7099" }}> (≈ {fmt(bdcCalc.totalPreenchidoBRL)})</span>}
                   {bdcCalc.faltandoAtribuirNative > 0.01 && (
                     <div style={{ color: "#00e676", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      <span>Faltam atribuir ≈ {fmtMoeda(bdcCalc.faltandoAtribuirNative, bdc.dcMoeda)}</span>
+                      <span>Faltam atribuir ≈ {fmtMoeda(bdcCalc.faltandoAtribuirNative, bdc.dcMoeda)} <span style={{ color: "#6b7099" }}>({["BRL", "USD", "EUR"].filter((m) => m !== bdc.dcMoeda).map((m) => fmtMoeda(bdcCalc.faltandoAtribuirBRL / fator(m), m)).join(" · ")})</span></span>
                       <button
-                        onClick={() => setBdc((prev) => ({ ...prev, dcEntradas: [...prev.dcEntradas, { id: uid(), odd: prev.dcOdd, stake: bdcCalc.faltandoAtribuirNative.toFixed(2) }] }))}
+                        onClick={() => setBdc((prev) => ({ ...prev, dcEntradas: [...prev.dcEntradas, { id: uid(), odd: prev.dcOdd, stake: bdcCalc.faltandoAtribuirNative.toFixed(2), moeda: prev.dcMoeda }] }))}
                         style={{ fontSize: 10, color: "#00e676", background: "none", border: "1px dashed rgba(0,230,118,.4)", borderRadius: 6, padding: "2px 6px" }}
                       >
                         completar com odd alvo
@@ -971,7 +999,7 @@ export default function Calculadora() {
               <button
                 onClick={() => lancarOperacao(nomeOp("Back + Dupla Chance"), "backdc", bdcCalc.stakeTotal, [
                   { label: "Back ganhou", odd: Number(bdc.backOdd) || null, stakeNative: Number(bdc.backStake) || 0, moeda: bdc.backMoeda, freebet: !!bdc.freebet, lucro: bdcCalc.lucroSeBackGanha, stakeBRL: bdcCalc.backStakeBRLReal, payoutBRL: bdcCalc.payoutBack, cashbackBRL: bdcCalc.cashbackBackValor },
-                  { label: "Dupla Chance ganhou", odd: bdcCalc.dcOddMedia || null, stakeNative: bdcCalc.dcStakeBRL / fator(bdc.dcMoeda), moeda: bdc.dcMoeda, lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
+                  { label: "Dupla Chance ganhou", odd: bdcCalc.dcOddMedia || null, stakeNative: bdcCalc.dcStakeBRL / fator(bdc.dcMoeda), moeda: bdc.dcMoeda, entradas: bdc.dcEntradas.filter((e) => Number(e.stake) > 0).map((e) => ({ odd: Number(e.odd) || null, stake: Number(e.stake), moeda: e.moeda || bdc.dcMoeda })), lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
                 ])}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
               >

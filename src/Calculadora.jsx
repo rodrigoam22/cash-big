@@ -9,7 +9,9 @@ const localDateStr = (d = new Date()) => {
 };
 const fmt = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtUSD = (v) => (Number(v) || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
-const fmtMoeda = (v, moeda) => (moeda === "USD" ? fmtUSD(v) : fmt(v));
+const fmtEUR = (v) => (Number(v) || 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+const fmtMoeda = (v, moeda) => (moeda === "USD" ? fmtUSD(v) : moeda === "EUR" ? fmtEUR(v) : fmt(v));
+const sim = (m) => (m === "USD" ? "US$" : m === "EUR" ? "€" : "R$");
 
 const RATE_CACHE_KEY = "cashbig_usdbrl_rate";
 const RATE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
@@ -59,7 +61,7 @@ export default function Calculadora() {
     if (!force) {
       try {
         const cached = JSON.parse(localStorage.getItem(RATE_CACHE_KEY) || "null");
-        if (cached && Date.now() - cached.updatedAt < RATE_MAX_AGE) {
+        if (cached && cached.eur && Date.now() - cached.updatedAt < RATE_MAX_AGE) {
           setRate(cached);
           return;
         }
@@ -71,7 +73,7 @@ export default function Calculadora() {
       const data = await res.json();
       const value = data?.rates?.BRL;
       if (value) {
-        const payload = { value, updatedAt: Date.now() };
+        const payload = { value, eur: data?.rates?.EUR || 0.92, updatedAt: Date.now() };
         setRate(payload);
         try { localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(payload)); } catch {}
       }
@@ -84,9 +86,13 @@ export default function Calculadora() {
   useEffect(() => { fetchRate(); }, [fetchRate]);
 
   const usdToBrl = rate?.value || 5; // fallback razoável se a busca falhar
+  const usdToEur = rate?.eur || 0.92;
+  const eurToBrl = usdToBrl / usdToEur;
+  const fator = (m) => (m === "USD" ? usdToBrl : m === "EUR" ? eurToBrl : 1);
 
   const [resultMoeda, setResultMoeda] = useState("BRL");
-  const fmtR = (v) => (resultMoeda === "USD" ? fmtUSD((Number(v) || 0) / usdToBrl) : fmt(v));
+  const fmtR = (v) => (resultMoeda === "USD" ? fmtUSD((Number(v) || 0) / usdToBrl) : resultMoeda === "EUR" ? fmtEUR((Number(v) || 0) / eurToBrl) : fmt(v));
+  const [conv, setConv] = useState({ valor: "", moeda: "USD", aberto: false });
 
   // ---------- modo Back x Lay ----------
   const [bl, setBl] = useState({
@@ -103,8 +109,8 @@ export default function Calculadora() {
   const updateLayEntrada = (id, patch) => setBl((prev) => ({ ...prev, layEntradas: prev.layEntradas.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
 
   const blCalc = useMemo(() => {
-    const backFator = bl.backMoeda === "USD" ? usdToBrl : 1;
-    const layFator = bl.layMoeda === "USD" ? usdToBrl : 1;
+    const backFator = fator(bl.backMoeda);
+    const layFator = fator(bl.layMoeda);
 
     const backOdd = Number(bl.backOdd || 0);
     const backComissao = Number(bl.backComissao || 0);
@@ -153,7 +159,7 @@ export default function Calculadora() {
       layStakeAutoNative, layStakeBRL, liabilityBRL, liabilityNative, lucroSeSair, lucroSeNaoSair, apostaTotal, cashbackValor, layCashbackValor,
       layOddMedia, temPreenchimento, totalPreenchidoNative, faltandoAtribuirNative,
     };
-  }, [bl, usdToBrl]);
+  }, [bl, usdToBrl, eurToBrl]);
 
   // ---------- modo Back + Dupla Chance ----------
   const [bdc, setBdc] = useState({
@@ -168,8 +174,8 @@ export default function Calculadora() {
   const updateDcEntrada = (id, patch) => setBdc((prev) => ({ ...prev, dcEntradas: prev.dcEntradas.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
 
   const bdcCalc = useMemo(() => {
-    const backFator = bdc.backMoeda === "USD" ? usdToBrl : 1;
-    const dcFator = bdc.dcMoeda === "USD" ? usdToBrl : 1;
+    const backFator = fator(bdc.backMoeda);
+    const dcFator = fator(bdc.dcMoeda);
 
     const backOdd = Number(bdc.backOdd || 0);
     const backComissao = Number(bdc.backComissao || 0);
@@ -223,7 +229,7 @@ export default function Calculadora() {
       dcOddMedia, temPreenchimento, totalPreenchidoNative, faltandoAtribuirNative,
       backStakeBRLReal: bdc.freebet ? 0 : backStakeBRL, payoutBack, payoutDC,
     };
-  }, [bdc, usdToBrl]);
+  }, [bdc, usdToBrl, eurToBrl]);
 
   // ---------- modo Proteção Duplo Green (2UP) ----------
   const [dg, setDg] = useState({
@@ -236,7 +242,7 @@ export default function Calculadora() {
   const updateDg = (patch) => setDg((prev) => ({ ...prev, ...patch }));
 
   const dgCalc = useMemo(() => {
-    const fator = dg.moeda === "USD" ? usdToBrl : 1;
+    const fator = fator(dg.moeda);
     const pNative = dg.resultadoTipo === "prejuizo" ? -Number(dg.resultadoValor || 0) : Number(dg.resultadoValor || 0);
     const p = pNative * fator;
     const a = Number(dg.pagamentoAntecipado || 0) * fator;
@@ -272,7 +278,7 @@ export default function Calculadora() {
       lucroSeManter: lucroSeManterLiquido, lucroSeDuploGreen: lucroSeDuploGreenLiquido,
       lucroSeManterLiquido, lucroSeDuploGreenLiquido, lucroSeManterBruto, lucroSeDuploGreenBruto,
     };
-  }, [dg, usdToBrl]);
+  }, [dg, usdToBrl, eurToBrl]);
 
   const [lancamento, setLancamento] = useState("idle"); // idle | saving | saved
   const lancarOperacao = async (descricao, tipo, apostado, opcoes, jogoInfo = null) => {
@@ -350,7 +356,7 @@ export default function Calculadora() {
     const mX = 1 + (oddX - 1) * factor;
     const C0 = S0 + factor * (W0 - S0);
     const cI = casaObj.cashback_ativo ? (Number(casaObj.cashback_pct || 0) / 100) * (Number(casaObj.conversao_pct || 0) / 100) : 0;
-    const fatorEsta = casaObj.moeda === "USD" ? usdToBrl : 1;
+    const fatorEsta = fator(casaObj.moeda);
 
     const anchorIdx = casas.findIndex((c, i) => i !== casaIdx && c.fixado && calc.totaisBRL[i] > 0);
     if (anchorIdx === -1) return; // sem nenhuma outra casa travada como referência
@@ -567,7 +573,7 @@ export default function Calculadora() {
   // ---------- cálculo (modo múltiplas casas) ----------
   const calc = useMemo(() => {
     const totais = casas.map((c) => totaisCasa(c));
-    const totaisBRL = casas.map((c, i) => totais[i].totalStake * (c.moeda === "USD" ? usdToBrl : 1));
+    const totaisBRL = casas.map((c, i) => totais[i].totalStake * (fator(c.moeda)));
     const dinheiroRealBRL = casas.map((c, i) => (c.freebet ? 0 : totaisBRL[i]));
     const m = casas.map((c, i) => c.freebet
       ? (totais[i].oddMedia - 1) * (1 - Number(c.comissao || 0) / 100)
@@ -575,7 +581,7 @@ export default function Calculadora() {
     const cRate = casas.map((c) => (c.cashback_ativo ? (Number(c.cashback_pct || 0) / 100) * (Number(c.conversao_pct || 0) / 100) : 0));
     const k = casas.map((_, i) => m[i] - cRate[i]);
     return { m, cRate, k, totais, totaisBRL, dinheiroRealBRL };
-  }, [casas, usdToBrl]);
+  }, [casas, usdToBrl, eurToBrl]);
 
   const autoBalancear = () => {
     const { k, totais, totaisBRL } = calc;
@@ -586,12 +592,12 @@ export default function Calculadora() {
       targetsBRL = casas.map((c, i) => (i === anchorIdx || c.fixado ? totaisBRL[i] : K / k[i]));
     } else {
       const somaInv = k.reduce((acc, ki) => acc + (ki > 0 ? 1 / ki : 0), 0);
-      const K = (Number(targetTotal || 0) * (targetMoeda === "USD" ? usdToBrl : 1)) / somaInv;
+      const K = (Number(targetTotal || 0) * (fator(targetMoeda))) / somaInv;
       targetsBRL = casas.map((c, i) => (c.fixado ? totaisBRL[i] : K / k[i]));
     }
     setCasas((prev) => prev.map((c, i) => {
       if (c.fixado) return c;
-      const fatorC = c.moeda === "USD" ? usdToBrl : 1;
+      const fatorC = fator(c.moeda);
       const alvoNative = targetsBRL[i] / fatorC;
       const atualNative = totais[i].totalStake;
       if (atualNative > 0) {
@@ -613,7 +619,7 @@ export default function Calculadora() {
       const teto = c.teto === "" ? Infinity : Number(c.teto);
       return Math.min(raw, teto);
     });
-    const pagamentosBRL = casas.map((c) => Number(c.pagamento_antecipado || 0) * (c.moeda === "USD" ? usdToBrl : 1));
+    const pagamentosBRL = casas.map((c) => Number(c.pagamento_antecipado || 0) * (fator(c.moeda)));
     const totalPagamentosAntecipados = pagamentosBRL.reduce((a, b) => a + b, 0);
     const linhas = casas.map((c, i) => {
       const payout = stakesBRL[i] * m[i];
@@ -634,7 +640,7 @@ export default function Calculadora() {
     const roiMin = stakeTotal ? (pior / stakeTotal) * 100 : 0;
     const roiMax = stakeTotal ? (melhor / stakeTotal) * 100 : 0;
     return { linhas, stakeTotal, pior, melhor, roiMin, roiMax, totalPagamentosAntecipados };
-  }, [casas, calc, usdToBrl]);
+  }, [casas, calc, usdToBrl, eurToBrl]);
 
   const temMultiplasFixadas = casas.filter((c) => c.fixado).length > 1;
 
@@ -643,7 +649,7 @@ export default function Calculadora() {
       <DollarSign size={13} color="#52525b" />
       {rate ? (
         <>
-          1 USD = {fmt(rate.value)}
+          1 USD = {fmt(rate.value)} · 1 EUR = {fmt(eurToBrl)}
           <span style={{ color: "#52525b" }}>
             · atualizada {new Date(rate.updatedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
           </span>
@@ -663,21 +669,40 @@ export default function Calculadora() {
 
   const SeletorMoeda = ({ value, onChange }) => (
     <div style={{ display: "flex", gap: 2, background: "#0b0d10", border: "1px solid #27292e", borderRadius: 6, padding: 2 }}>
-      {["BRL", "USD"].map((m) => (
+      {["BRL", "USD", "EUR"].map((m) => (
         <button
           key={m}
           onClick={() => onChange(m)}
           style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: value === m ? "#fbbf24" : "transparent", color: value === m ? "#0b0d10" : "#71717a" }}
         >
-          {m === "BRL" ? "R$" : "US$"}
+          {sim(m)}
         </button>
       ))}
+    </div>
+  );
+
+  const convBRL = (Number(conv.valor) || 0) * fator(conv.moeda);
+  const conversor = (
+    <div style={{ marginBottom: 14 }}>
+      <button onClick={() => setConv((p) => ({ ...p, aberto: !p.aberto }))} style={{ background: "none", border: "none", color: "#fbbf24", fontSize: 11.5, padding: 0 }} className="mono">
+        {conv.aberto ? "▾" : "▸"} conversor de moedas (US$ ⇄ € ⇄ R$)
+      </button>
+      {conv.aberto && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          <input type="number" step="0.01" value={conv.valor} onChange={(e) => setConv((p) => ({ ...p, valor: e.target.value }))} placeholder="valor" className="input-field" style={{ width: 120 }} />
+          <SeletorMoeda value={conv.moeda} onChange={(m) => setConv((p) => ({ ...p, moeda: m }))} />
+          <span className="mono" style={{ fontSize: 12, color: "#e4e4e7" }}>
+            = {["USD", "EUR", "BRL"].filter((m) => m !== conv.moeda).map((m) => fmtMoeda(convBRL / fator(m), m)).join(" = ")}
+          </span>
+        </div>
+      )}
     </div>
   );
 
   return (
     <div>
       <CotacaoBar />
+      {conversor}
 
       {/* barra de salvar / carregar */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
@@ -756,14 +781,14 @@ export default function Calculadora() {
             </p>
 
             <div style={{ marginBottom: 14 }}>
-              <Campo label={`Investimento total (${dg.moeda === "USD" ? "US$" : "R$"}, informativo)`}>
+              <Campo label={`Investimento total (${sim(dg.moeda)}, informativo)`}>
                 <input type="number" step="0.01" value={dg.investimento} onChange={(e) => updateDg({ investimento: e.target.value })} placeholder="Ex: 200" className="input-field" />
               </Campo>
             </div>
 
             <div style={{ marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500 }}>
-                Resultado da operação ({dg.moeda === "USD" ? "US$" : "R$"}) se o time NÃO segurar o resultado
+                Resultado da operação ({sim(dg.moeda)}) se o time NÃO segurar o resultado
               </label>
               <div style={{ display: "flex", gap: 4 }}>
                 <button onClick={() => updateDg({ resultadoTipo: "prejuizo" })} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", background: dg.resultadoTipo === "prejuizo" ? "rgba(248,113,113,.2)" : "#27292e", color: dg.resultadoTipo === "prejuizo" ? "#f87171" : "#71717a" }}>Prejuízo</button>
@@ -772,7 +797,7 @@ export default function Calculadora() {
             </div>
             <input type="number" step="0.01" value={dg.resultadoValor} onChange={(e) => updateDg({ resultadoValor: e.target.value })} placeholder="Ex: 30" className="input-field" style={{ marginBottom: 14 }} />
 
-            <Campo label={`Pagamento antecipado já recebido — 2UP (${dg.moeda === "USD" ? "US$" : "R$"})`}>
+            <Campo label={`Pagamento antecipado já recebido — 2UP (${sim(dg.moeda)})`}>
               <input type="number" step="0.01" value={dg.pagamentoAntecipado} onChange={(e) => updateDg({ pagamentoAntecipado: e.target.value })} placeholder="Ex: 118,80" className="input-field" />
             </Campo>
             <div style={{ marginTop: 14 }}>
@@ -809,7 +834,7 @@ export default function Calculadora() {
 
                 {dg.modoStake === "custom" && (
                   <div style={{ marginBottom: 14, maxWidth: 200 }}>
-                    <Campo label={`Stake a testar (${dg.moeda === "USD" ? "US$" : "R$"})`}>
+                    <Campo label={`Stake a testar (${sim(dg.moeda)})`}>
                       <input type="number" step="0.01" value={dg.stakeCustom} onChange={(e) => updateDg({ stakeCustom: e.target.value })} placeholder="0,00" className="input-field" />
                     </Campo>
                   </div>
@@ -854,7 +879,7 @@ export default function Calculadora() {
                 <Campo label="Odd"><input type="number" step="0.01" value={bdc.backOdd} onChange={(e) => updateBdc({ backOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bdc.backComissao} onChange={(e) => updateBdc({ backComissao: e.target.value })} className="input-field" /></Campo>
               </div>
-              <Campo label={`Stake (${bdc.backMoeda === "USD" ? "US$" : "R$"})`}><input type="number" step="0.01" value={bdc.backStake} onChange={(e) => updateBdc({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+              <Campo label={`Stake (${sim(bdc.backMoeda)})`}><input type="number" step="0.01" value={bdc.backStake} onChange={(e) => updateBdc({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
 
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
                 <input type="checkbox" checked={bdc.freebet} onChange={(e) => updateBdc({ freebet: e.target.checked })} />
@@ -995,7 +1020,7 @@ export default function Calculadora() {
                 <Campo label="Odd"><input type="number" step="0.01" value={bl.backOdd} onChange={(e) => updateBl({ backOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.backComissao} onChange={(e) => updateBl({ backComissao: e.target.value })} className="input-field" /></Campo>
               </div>
-              <Campo label={`Stake (${bl.backMoeda === "USD" ? "US$" : "R$"})`}><input type="number" step="0.01" value={bl.backStake} onChange={(e) => updateBl({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
+              <Campo label={`Stake (${sim(bl.backMoeda)})`}><input type="number" step="0.01" value={bl.backStake} onChange={(e) => updateBl({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
                 <input type="checkbox" checked={bl.freebet} onChange={(e) => updateBl({ freebet: e.target.checked })} />
                 Essa é uma aposta grátis (freebet) — stake não é devolvida
@@ -1068,7 +1093,7 @@ export default function Calculadora() {
 
               <div style={{ marginTop: 4, fontSize: 11.5, color: "#71717a" }}>
                 Responsabilidade: <span className="mono" style={{ color: "#f87171" }}>{fmtMoeda(blCalc.liabilityNative, bl.layMoeda)}</span>
-                {bl.layMoeda === "USD" && <span style={{ color: "#52525b" }}> ({fmt(blCalc.liabilityBRL)})</span>}
+                {bl.layMoeda !== "BRL" && <span style={{ color: "#52525b" }}> ({fmt(blCalc.liabilityBRL)})</span>}
               </div>
               {bl.cashbackAtivo && (
                 <div style={{ marginTop: 6, fontSize: 11.5, color: "#71717a" }}>
@@ -1227,7 +1252,7 @@ export default function Calculadora() {
             </div>
 
             <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
-              Entradas (odd + stake em {c.moeda === "USD" ? "US$" : "R$"})
+              Entradas (odd + stake em {sim(c.moeda)})
             </label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
               {c.entradas.map((e) => (
@@ -1261,7 +1286,7 @@ export default function Calculadora() {
                 Odd média: <span style={{ color: "#e4e4e7" }}>{totaisCasa(c).oddMedia.toFixed(4)}</span> · Stake total: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(totaisCasa(c).totalStake, c.moeda)}</span>
               </div>
             )}
-            {c.moeda === "USD" && (
+            {c.moeda !== "BRL" && (
               <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 8 }} className="mono">
                 ≈ {fmt(totaisCasa(c).totalStake * usdToBrl)}
               </div>
@@ -1294,7 +1319,7 @@ export default function Calculadora() {
             )}
 
             <div style={{ marginTop: 10 }}>
-              <Campo label={`Pagamento antecipado recebido — total (2UP, ${c.moeda === "USD" ? "US$" : "R$"}) — opcional`}>
+              <Campo label={`Pagamento antecipado recebido — total (2UP, ${sim(c.moeda)}) — opcional`}>
                 <input type="number" step="0.01" value={c.pagamento_antecipado} onChange={(e) => updateCasa(c.id, { pagamento_antecipado: e.target.value })} placeholder="0,00" className="input-field" />
               </Campo>
               <div style={{ fontSize: 10.5, color: "#52525b", marginTop: 3 }}>
@@ -1355,7 +1380,7 @@ export default function Calculadora() {
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">{l.comissao}%</td>
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">
                     {fmtMoeda(l.stakeNative, l.moeda)}
-                    {l.moeda === "USD" && <div style={{ fontSize: 10, color: "#52525b" }}>≈ {fmt(l.stakeBRL)}</div>}
+                    {l.moeda !== "BRL" && <div style={{ fontSize: 10, color: "#52525b" }}>≈ {fmt(l.stakeBRL)}</div>}
                   </td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#c084fc" }} className="mono">{l.cashbackPct ? `${l.cashbackPct}%` : "-"}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: l.deficit >= 0 ? "#34d399" : "#fb7185" }} className="mono">{l.deficit >= 0 ? "+" : ""}{fmtR(l.deficit)}</td>

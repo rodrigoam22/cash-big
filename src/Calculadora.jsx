@@ -645,22 +645,22 @@ export default function Calculadora() {
   const temMultiplasFixadas = casas.filter((c) => c.fixado).length > 1;
 
   const CotacaoBar = () => (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#71717a", marginBottom: 14, flexWrap: "wrap" }} className="mono">
-      <DollarSign size={13} color="#52525b" />
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#8b90b3", marginBottom: 14, flexWrap: "wrap" }} className="mono">
+      <DollarSign size={13} color="#6b7099" />
       {rate ? (
         <>
           1 USD = {fmt(rate.value)} · 1 EUR = {fmt(eurToBrl)}
-          <span style={{ color: "#52525b" }}>
+          <span style={{ color: "#6b7099" }}>
             · atualizada {new Date(rate.updatedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
           </span>
         </>
       ) : (
         <span>buscando cotação…</span>
       )}
-      <button onClick={() => fetchRate(true)} disabled={rateLoading} style={{ background: "none", border: "none", color: "#fbbf24", display: "flex", alignItems: "center" }} title="atualizar cotação agora">
+      <button onClick={() => fetchRate(true)} disabled={rateLoading} style={{ background: "none", border: "none", color: "#00e676", display: "flex", alignItems: "center" }} title="atualizar cotação agora">
         <RefreshCw size={12} style={{ animation: rateLoading ? "spin 1s linear infinite" : "none" }} />
       </button>
-      <span style={{ color: "#3f3f46", margin: "0 2px" }}>|</span>
+      <span style={{ color: "#4a5080", margin: "0 2px" }}>|</span>
       <span>ver resultados em:</span>
       <SeletorMoeda value={resultMoeda} onChange={setResultMoeda} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -668,12 +668,12 @@ export default function Calculadora() {
   );
 
   const SeletorMoeda = ({ value, onChange }) => (
-    <div style={{ display: "flex", gap: 2, background: "#0b0d10", border: "1px solid #27292e", borderRadius: 6, padding: 2 }}>
+    <div style={{ display: "flex", gap: 2, background: "#0b0e1d", border: "1px solid #2a2f52", borderRadius: 6, padding: 2 }}>
       {["BRL", "USD", "EUR"].map((m) => (
         <button
           key={m}
           onClick={() => onChange(m)}
-          style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: value === m ? "#fbbf24" : "transparent", color: value === m ? "#0b0d10" : "#71717a" }}
+          style={{ padding: "3px 7px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: value === m ? "#00e676" : "transparent", color: value === m ? "#0b0e1d" : "#8b90b3" }}
         >
           {sim(m)}
         </button>
@@ -684,7 +684,7 @@ export default function Calculadora() {
   const convBRL = (Number(conv.valor) || 0) * fator(conv.moeda);
   const conversor = (
     <div style={{ marginBottom: 14 }}>
-      <button onClick={() => setConv((p) => ({ ...p, aberto: !p.aberto }))} style={{ background: "none", border: "none", color: "#fbbf24", fontSize: 11.5, padding: 0 }} className="mono">
+      <button onClick={() => setConv((p) => ({ ...p, aberto: !p.aberto }))} style={{ background: "none", border: "none", color: "#00e676", fontSize: 11.5, padding: 0 }} className="mono">
         {conv.aberto ? "▾" : "▸"} conversor de moedas (US$ ⇄ € ⇄ R$)
       </button>
       {conv.aberto && (
@@ -713,70 +713,70 @@ export default function Calculadora() {
           className="input-field"
           style={{ maxWidth: 280 }}
         />
-        <button onClick={salvar} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
+        <button onClick={salvar} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#00e676", color: "#0b0e1d", border: "none" }}>
           <Save size={13} /> salvar
         </button>
-        <button onClick={() => setMostrarSalvos((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#18181b", color: "#a1a1aa", border: "1px solid #27292e" }}>
+        <button onClick={() => setMostrarSalvos((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#1a1e3a", color: "#b4b9d6", border: "1px solid #2a2f52" }}>
           <FolderOpen size={13} /> salvos ({salvos.length})
         </button>
-        <button onClick={novoCalculo} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "transparent", color: "#71717a", border: "1px dashed #3f3f46" }}>
+        <button onClick={novoCalculo} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "transparent", color: "#8b90b3", border: "1px dashed #4a5080" }}>
           + novo cálculo
         </button>
-        <span style={{ fontSize: 11, color: "#52525b" }} className="mono">
+        <span style={{ fontSize: 11, color: "#6b7099" }} className="mono">
           {saveState === "saving" && "salvando…"}
-          {saveState === "saved" && <span style={{ color: "#34d399" }}>salvo</span>}
-          {saveState === "error" && <span style={{ color: "#fb7185" }}>erro ao salvar</span>}
+          {saveState === "saved" && <span style={{ color: "#00e676" }}>salvo</span>}
+          {saveState === "error" && <span style={{ color: "#ff5a6a" }}>erro ao salvar</span>}
         </span>
       </div>
 
       {mostrarSalvos && (
-        <div style={{ border: "1px solid #27292e", borderRadius: 8, marginBottom: 18, overflow: "hidden" }}>
-          {salvos.length === 0 && <div style={{ padding: 14, fontSize: 12, color: "#52525b" }}>Nenhum cálculo salvo ainda.</div>}
+        <div style={{ border: "1px solid #2a2f52", borderRadius: 8, marginBottom: 18, overflow: "hidden" }}>
+          {salvos.length === 0 && <div style={{ padding: 14, fontSize: 12, color: "#6b7099" }}>Nenhum cálculo salvo ainda.</div>}
           {salvos.map((s) => (
-            <div key={s.id} onClick={() => carregar(s.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1c1c1f", cursor: "pointer", background: s.id === calculoAtualId ? "rgba(251,191,36,.06)" : "transparent" }}>
+            <div key={s.id} onClick={() => carregar(s.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #23274a", cursor: "pointer", background: s.id === calculoAtualId ? "rgba(0,230,118,.06)" : "transparent" }}>
               <div>
                 <div style={{ fontSize: 13, color: "#e4e4e7" }}>
                   {s.nome || "Sem nome"}
-                  <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 7px", borderRadius: 999, background: s.modo === "backlay" ? "rgba(248,113,113,.12)" : s.modo === "backdc" ? "rgba(96,165,250,.12)" : s.modo === "dg2up" ? "rgba(251,146,60,.12)" : "rgba(45,212,191,.12)", color: s.modo === "backlay" ? "#f87171" : s.modo === "backdc" ? "#60a5fa" : s.modo === "dg2up" ? "#fb923c" : "#2dd4bf" }}>
+                  <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 7px", borderRadius: 999, background: s.modo === "backlay" ? "rgba(248,113,113,.12)" : s.modo === "backdc" ? "rgba(96,165,250,.12)" : s.modo === "dg2up" ? "rgba(251,146,60,.12)" : "rgba(45,212,191,.12)", color: s.modo === "backlay" ? "#ff5a6a" : s.modo === "backdc" ? "#60a5fa" : s.modo === "dg2up" ? "#fb923c" : "#2dd4bf" }}>
                     {s.modo === "backlay" ? "back x lay" : s.modo === "backdc" ? "back + dupla chance" : s.modo === "dg2up" ? "duplo green 2up" : "múltiplas"}
                   </span>
                 </div>
-                <div style={{ fontSize: 10.5, color: "#52525b" }} className="mono">{new Date(s.atualizado_em).toLocaleString("pt-BR")}</div>
+                <div style={{ fontSize: 10.5, color: "#6b7099" }} className="mono">{new Date(s.atualizado_em).toLocaleString("pt-BR")}</div>
               </div>
-              <button onClick={(e) => excluirSalvo(s.id, e)} style={{ background: "none", border: "none", color: "#3f3f46" }}><Trash2 size={13} /></button>
+              <button onClick={(e) => excluirSalvo(s.id, e)} style={{ background: "none", border: "none", color: "#4a5080" }}><Trash2 size={13} /></button>
             </div>
           ))}
         </div>
       )}
 
       {/* seletor de modo */}
-      <div style={{ display: "flex", gap: 4, background: "#18181b", border: "1px solid #27292e", borderRadius: 999, padding: 3, width: "fit-content", marginBottom: 18 }}>
+      <div style={{ display: "flex", gap: 4, background: "#1a1e3a", border: "1px solid #2a2f52", borderRadius: 999, padding: 3, width: "fit-content", marginBottom: 18 }}>
         <button
           onClick={() => setModo("multiplas")}
-          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "multiplas" ? "#fbbf24" : "transparent", color: modo === "multiplas" ? "#0b0d10" : "#a1a1aa" }}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "multiplas" ? "#00e676" : "transparent", color: modo === "multiplas" ? "#0b0e1d" : "#b4b9d6" }}
         >Múltiplas casas</button>
         <button
           onClick={() => setModo("backlay")}
-          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backlay" ? "#fbbf24" : "transparent", color: modo === "backlay" ? "#0b0d10" : "#a1a1aa" }}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backlay" ? "#00e676" : "transparent", color: modo === "backlay" ? "#0b0e1d" : "#b4b9d6" }}
         >Back x Lay (2 vias)</button>
         <button
           onClick={() => setModo("backdc")}
-          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backdc" ? "#fbbf24" : "transparent", color: modo === "backdc" ? "#0b0d10" : "#a1a1aa" }}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "backdc" ? "#00e676" : "transparent", color: modo === "backdc" ? "#0b0e1d" : "#b4b9d6" }}
         >Back + Dupla Chance</button>
         <button
           onClick={() => setModo("dg2up")}
-          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "dg2up" ? "#fbbf24" : "transparent", color: modo === "dg2up" ? "#0b0d10" : "#a1a1aa" }}
+          style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500, border: "none", background: modo === "dg2up" ? "#00e676" : "transparent", color: modo === "dg2up" ? "#0b0e1d" : "#b4b9d6" }}
         >Duplo Green (2UP)</button>
       </div>
 
       {modo === "dg2up" ? (
         <div>
-          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18, marginBottom: 18 }}>
+          <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 18, marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
               <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", margin: 0 }}>Proteção Duplo Green (2UP)</h2>
               <SeletorMoeda value={dg.moeda} onChange={(m) => updateDg({ moeda: m })} />
             </div>
-            <p style={{ fontSize: 11.5, color: "#71717a", marginBottom: 16 }}>
+            <p style={{ fontSize: 11.5, color: "#8b90b3", marginBottom: 16 }}>
               Calcule a proteção ao vivo após o 2-0: quanto apostar no time líder pra igualar o lucro, seja qual for o resultado final.
             </p>
 
@@ -787,12 +787,12 @@ export default function Calculadora() {
             </div>
 
             <div style={{ marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500 }}>
+              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500 }}>
                 Resultado da operação ({sim(dg.moeda)}) se o time NÃO segurar o resultado
               </label>
               <div style={{ display: "flex", gap: 4 }}>
-                <button onClick={() => updateDg({ resultadoTipo: "prejuizo" })} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", background: dg.resultadoTipo === "prejuizo" ? "rgba(248,113,113,.2)" : "#27292e", color: dg.resultadoTipo === "prejuizo" ? "#f87171" : "#71717a" }}>Prejuízo</button>
-                <button onClick={() => updateDg({ resultadoTipo: "lucro" })} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", background: dg.resultadoTipo === "lucro" ? "rgba(52,211,153,.2)" : "#27292e", color: dg.resultadoTipo === "lucro" ? "#34d399" : "#71717a" }}>Lucro</button>
+                <button onClick={() => updateDg({ resultadoTipo: "prejuizo" })} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", background: dg.resultadoTipo === "prejuizo" ? "rgba(248,113,113,.2)" : "#2a2f52", color: dg.resultadoTipo === "prejuizo" ? "#ff5a6a" : "#8b90b3" }}>Prejuízo</button>
+                <button onClick={() => updateDg({ resultadoTipo: "lucro" })} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "none", background: dg.resultadoTipo === "lucro" ? "rgba(52,211,153,.2)" : "#2a2f52", color: dg.resultadoTipo === "lucro" ? "#00e676" : "#8b90b3" }}>Lucro</button>
               </div>
             </div>
             <input type="number" step="0.01" value={dg.resultadoValor} onChange={(e) => updateDg({ resultadoValor: e.target.value })} placeholder="Ex: 30" className="input-field" style={{ marginBottom: 14 }} />
@@ -807,9 +807,9 @@ export default function Calculadora() {
             </div>
           </div>
 
-          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+          <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 18 }}>
             {!dgCalc.temDados ? (
-              <div style={{ textAlign: "center", color: "#52525b", padding: "20px 0" }}>
+              <div style={{ textAlign: "center", color: "#6b7099", padding: "20px 0" }}>
                 <div style={{ fontSize: 13 }}>Preencha o resultado, o pagamento antecipado e a odd ao vivo pra ver a proteção</div>
                 <div style={{ fontSize: 11, marginTop: 4 }}>Odd deve ser maior que 1.01</div>
               </div>
@@ -818,16 +818,16 @@ export default function Calculadora() {
                 <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 12 }}>Proteção sugerida</h2>
 
                 <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-                  <button onClick={() => updateDg({ modoStake: "conservadora" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "conservadora" ? "#38bdf8" : "#27292e"}`, background: dg.modoStake === "conservadora" ? "rgba(56,189,248,.12)" : "transparent", color: dg.modoStake === "conservadora" ? "#38bdf8" : "#a1a1aa" }}>
+                  <button onClick={() => updateDg({ modoStake: "conservadora" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "conservadora" ? "#38bdf8" : "#2a2f52"}`, background: dg.modoStake === "conservadora" ? "rgba(56,189,248,.12)" : "transparent", color: dg.modoStake === "conservadora" ? "#38bdf8" : "#b4b9d6" }}>
                     🛡️ Conservadora (risco zero)
                   </button>
-                  <button onClick={() => updateDg({ modoStake: "profissional" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "profissional" ? "#fbbf24" : "#27292e"}`, background: dg.modoStake === "profissional" ? "rgba(251,191,36,.12)" : "transparent", color: dg.modoStake === "profissional" ? "#fbbf24" : "#a1a1aa" }}>
+                  <button onClick={() => updateDg({ modoStake: "profissional" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "profissional" ? "#00e676" : "#2a2f52"}`, background: dg.modoStake === "profissional" ? "rgba(0,230,118,.12)" : "transparent", color: dg.modoStake === "profissional" ? "#00e676" : "#b4b9d6" }}>
                     ⚡ Profissional (lucro igual)
                   </button>
-                  <button onClick={() => updateDg({ modoStake: "agressiva" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "agressiva" ? "#34d399" : "#27292e"}`, background: dg.modoStake === "agressiva" ? "rgba(52,211,153,.12)" : "transparent", color: dg.modoStake === "agressiva" ? "#34d399" : "#a1a1aa" }}>
+                  <button onClick={() => updateDg({ modoStake: "agressiva" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "agressiva" ? "#00e676" : "#2a2f52"}`, background: dg.modoStake === "agressiva" ? "rgba(52,211,153,.12)" : "transparent", color: dg.modoStake === "agressiva" ? "#00e676" : "#b4b9d6" }}>
                     📈 Agressiva (DG maximizado)
                   </button>
-                  <button onClick={() => updateDg({ modoStake: "custom" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "custom" ? "#a78bfa" : "#27292e"}`, background: dg.modoStake === "custom" ? "rgba(167,139,250,.12)" : "transparent", color: dg.modoStake === "custom" ? "#a78bfa" : "#a1a1aa" }}>
+                  <button onClick={() => updateDg({ modoStake: "custom" })} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, border: `1px solid ${dg.modoStake === "custom" ? "#a78bfa" : "#2a2f52"}`, background: dg.modoStake === "custom" ? "rgba(167,139,250,.12)" : "transparent", color: dg.modoStake === "custom" ? "#a78bfa" : "#b4b9d6" }}>
                     ✎ Personalizada
                   </button>
                 </div>
@@ -841,15 +841,15 @@ export default function Calculadora() {
                 )}
 
                 <div style={{ marginBottom: 16, fontSize: 13, color: "#e4e4e7" }}>
-                  Aposte <span className="mono" style={{ color: "#fbbf24", fontWeight: 700 }}>{fmtMoeda(dgCalc.stakeNative, dg.moeda)}</span> a favor do time líder, na odd atual ao vivo.
+                  Aposte <span className="mono" style={{ color: "#00e676", fontWeight: 700 }}>{fmtMoeda(dgCalc.stakeNative, dg.moeda)}</span> a favor do time líder, na odd atual ao vivo.
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
-                  <Metric label="Lucro líquido se manter a vitória (PA)" value={fmtR(dgCalc.lucroSeManter)} sub={`bruto (sem a operação): ${fmtR(dgCalc.lucroSeManterBruto)}`} color={dgCalc.lucroSeManter >= 0 ? "#34d399" : "#fb7185"} />
-                  <Metric label="Lucro líquido se sair Duplo Green" value={fmtR(dgCalc.lucroSeDuploGreen)} sub={`bruto (sem a operação): ${fmtR(dgCalc.lucroSeDuploGreenBruto)}`} color={dgCalc.lucroSeDuploGreen >= 0 ? "#34d399" : "#fb7185"} />
+                  <Metric label="Lucro líquido se manter a vitória (PA)" value={fmtR(dgCalc.lucroSeManter)} sub={`bruto (sem a operação): ${fmtR(dgCalc.lucroSeManterBruto)}`} color={dgCalc.lucroSeManter >= 0 ? "#00e676" : "#ff5a6a"} />
+                  <Metric label="Lucro líquido se sair Duplo Green" value={fmtR(dgCalc.lucroSeDuploGreen)} sub={`bruto (sem a operação): ${fmtR(dgCalc.lucroSeDuploGreenBruto)}`} color={dgCalc.lucroSeDuploGreen >= 0 ? "#00e676" : "#ff5a6a"} />
                 </div>
                 {Math.abs(dgCalc.lucroSeManter - dgCalc.lucroSeDuploGreen) < 0.5 && (
-                  <div style={{ marginTop: 10, fontSize: 11.5, color: "#34d399", textAlign: "center" }}>Lucro igual nos dois cenários ✓</div>
+                  <div style={{ marginTop: 10, fontSize: 11.5, color: "#00e676", textAlign: "center" }}>Lucro igual nos dois cenários ✓</div>
                 )}
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
                   <button
@@ -857,7 +857,7 @@ export default function Calculadora() {
                       { label: "Manteve a vitória (PA)", lucro: dgCalc.lucroSeManter, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
                       { label: "Saiu Duplo Green", lucro: dgCalc.lucroSeDuploGreen, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
                     ])}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
                   >
                     <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
                   </button>
@@ -870,9 +870,9 @@ export default function Calculadora() {
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginBottom: 18 }}>
             {/* BACK */}
-            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+            <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#34d399" }}>Back (seleção principal)</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#00e676" }}>Back (seleção principal)</div>
                 <SeletorMoeda value={bdc.backMoeda} onChange={(m) => updateBdc({ backMoeda: m })} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
@@ -881,17 +881,17 @@ export default function Calculadora() {
               </div>
               <Campo label={`Stake (${sim(bdc.backMoeda)})`}><input type="number" step="0.01" value={bdc.backStake} onChange={(e) => updateBdc({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
                 <input type="checkbox" checked={bdc.freebet} onChange={(e) => updateBdc({ freebet: e.target.checked })} />
                 Essa é uma aposta grátis (freebet) — stake não é devolvida
               </label>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
                 <input type="checkbox" checked={bdc.cashbackAtivo} onChange={(e) => updateBdc({ cashbackAtivo: e.target.checked })} />
                 O Back gera cashback se perder
               </label>
               {bdc.cashbackAtivo && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: 10, background: "rgba(251,191,36,.02)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(0,230,118,.2)", borderRadius: 8, padding: 10, background: "rgba(0,230,118,.02)" }}>
                   <Campo label="Cashback (%)"><input type="number" step="0.01" value={bdc.cashbackPct} onChange={(e) => updateBdc({ cashbackPct: e.target.value })} className="input-field" /></Campo>
                   <Campo label="Conversão (%)"><input type="number" step="0.01" value={bdc.conversaoPct} onChange={(e) => updateBdc({ conversaoPct: e.target.value })} className="input-field" /></Campo>
                   <div style={{ gridColumn: "1 / -1" }}>
@@ -902,20 +902,20 @@ export default function Calculadora() {
             </div>
 
             {/* DUPLA CHANCE */}
-            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+            <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>Dupla Chance (cobre o resto)</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#ff5a6a" }}>Dupla Chance (cobre o resto)</div>
                 <SeletorMoeda value={bdc.dcMoeda} onChange={(m) => updateBdc({ dcMoeda: m })} />
               </div>
               <div style={{ marginBottom: 8 }}>
                 <Campo label="Odd ofertada (alvo)"><input type="number" step="0.01" value={bdc.dcOdd} onChange={(e) => updateBdc({ dcOdd: e.target.value })} placeholder="0.00" className="input-field" /></Campo>
               </div>
 
-              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 6 }}>
-                Sugestão de stake total: <span className="mono" style={{ color: "#fbbf24" }}>{fmtMoeda(bdcCalc.dcStakeAutoNative, bdc.dcMoeda)}</span>
+              <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 6 }}>
+                Sugestão de stake total: <span className="mono" style={{ color: "#00e676" }}>{fmtMoeda(bdcCalc.dcStakeAutoNative, bdc.dcMoeda)}</span>
               </div>
 
-              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 4 }}>
                 Preenchimentos reais (odd + stake, caso não feche tudo de uma vez)
               </label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
@@ -923,23 +923,23 @@ export default function Calculadora() {
                   <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <input type="number" step="0.01" value={e.odd} onChange={(ev) => updateDcEntrada(e.id, { odd: ev.target.value })} placeholder="odd" className="input-field" style={{ width: 70 }} />
                     <input type="number" step="0.01" value={e.stake} onChange={(ev) => updateDcEntrada(e.id, { stake: ev.target.value })} placeholder="stake" className="input-field" style={{ flex: 1 }} />
-                    <button onClick={() => removeDcEntrada(e.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={13} /></button>
+                    <button onClick={() => removeDcEntrada(e.id)} style={{ background: "none", border: "none", color: "#4a5080" }}><X size={13} /></button>
                   </div>
                 ))}
               </div>
-              <button onClick={addDcEntrada} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#f87171", background: "none", border: "1px dashed rgba(248,113,113,.4)", borderRadius: 6, padding: "4px 8px", marginBottom: 8 }}>
+              <button onClick={addDcEntrada} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#ff5a6a", background: "none", border: "1px dashed rgba(248,113,113,.4)", borderRadius: 6, padding: "4px 8px", marginBottom: 8 }}>
                 <Plus size={11} /> adicionar preenchimento
               </button>
 
               {bdcCalc.temPreenchimento ? (
-                <div style={{ fontSize: 11, color: "#71717a", marginBottom: 8 }} className="mono">
+                <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 8 }} className="mono">
                   Odd média conseguida: <span style={{ color: "#e4e4e7" }}>{bdcCalc.dcOddMedia.toFixed(4)}</span> · Preenchido: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(bdcCalc.totalPreenchidoNative, bdc.dcMoeda)}</span>
                   {bdcCalc.faltandoAtribuirNative > 0.01 && (
-                    <div style={{ color: "#fbbf24", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <div style={{ color: "#00e676", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <span>Faltam atribuir ≈ {fmtMoeda(bdcCalc.faltandoAtribuirNative, bdc.dcMoeda)}</span>
                       <button
                         onClick={() => setBdc((prev) => ({ ...prev, dcEntradas: [...prev.dcEntradas, { id: uid(), odd: prev.dcOdd, stake: bdcCalc.faltandoAtribuirNative.toFixed(2) }] }))}
-                        style={{ fontSize: 10, color: "#fbbf24", background: "none", border: "1px dashed rgba(251,191,36,.4)", borderRadius: 6, padding: "2px 6px" }}
+                        style={{ fontSize: 10, color: "#00e676", background: "none", border: "1px dashed rgba(0,230,118,.4)", borderRadius: 6, padding: "2px 6px" }}
                       >
                         completar com odd alvo
                       </button>
@@ -947,16 +947,16 @@ export default function Calculadora() {
                   )}
                 </div>
               ) : (
-                <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 8 }}>Sem preenchimentos ainda — usando a sugestão automática acima para o cálculo.</div>
+                <div style={{ fontSize: 10.5, color: "#6b7099", marginBottom: 8 }}>Sem preenchimentos ainda — usando a sugestão automática acima para o cálculo.</div>
               )}
 
               {bdc.cashbackAtivo && (
-                <div style={{ marginTop: 4, fontSize: 11.5, color: "#71717a" }}>
-                  Cashback estimado (se o Back perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(bdcCalc.cashbackBackValor)}</span>
+                <div style={{ marginTop: 4, fontSize: 11.5, color: "#8b90b3" }}>
+                  Cashback estimado (se o Back perder): <span className="mono" style={{ color: "#f59e0b" }}>{fmt(bdcCalc.cashbackBackValor)}</span>
                 </div>
               )}
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 8, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
                 <input type="checkbox" checked={bdc.dcCashbackAtivo} onChange={(e) => updateBdc({ dcCashbackAtivo: e.target.checked })} />
                 A Dupla Chance gera cashback se perder
               </label>
@@ -967,8 +967,8 @@ export default function Calculadora() {
                   <div style={{ gridColumn: "1 / -1" }}>
                     <Campo label="Teto do cashback (R$, vazio = sem limite)"><input type="number" step="0.01" value={bdc.dcTeto} onChange={(e) => updateBdc({ dcTeto: e.target.value })} placeholder="sem limite" className="input-field" /></Campo>
                   </div>
-                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#71717a" }}>
-                    Cashback estimado (se a Dupla Chance perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(bdcCalc.cashbackDCValor)}</span>
+                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#8b90b3" }}>
+                    Cashback estimado (se a Dupla Chance perder): <span className="mono" style={{ color: "#f59e0b" }}>{fmt(bdcCalc.cashbackDCValor)}</span>
                   </div>
                 </div>
               )}
@@ -976,22 +976,22 @@ export default function Calculadora() {
           </div>
 
           {/* resultado */}
-          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+          <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 18 }}>
             <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultado (em reais)</h2>
-            <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Duas apostas normais (back) cobrindo resultados complementares — sem precisar de exchange.</p>
+            <p style={{ fontSize: 11, color: "#6b7099", marginBottom: 14 }}>Duas apostas normais (back) cobrindo resultados complementares — sem precisar de exchange.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
               <Metric label="Aposta total" value={fmtR(bdcCalc.stakeTotal)} />
               <Metric
                 label="Lucro se Back ganhar"
                 value={fmtR(bdcCalc.lucroSeBackGanha)}
                 sub={bdcCalc.stakeTotal ? `${((bdcCalc.lucroSeBackGanha / bdcCalc.stakeTotal) * 100).toFixed(2)}%` : null}
-                color={bdcCalc.lucroSeBackGanha >= 0 ? "#34d399" : "#fb7185"}
+                color={bdcCalc.lucroSeBackGanha >= 0 ? "#00e676" : "#ff5a6a"}
               />
               <Metric
                 label="Lucro se Dupla Chance ganhar"
                 value={fmtR(bdcCalc.lucroSeDCGanha)}
                 sub={bdcCalc.stakeTotal ? `${((bdcCalc.lucroSeDCGanha / bdcCalc.stakeTotal) * 100).toFixed(2)}%` : null}
-                color={bdcCalc.lucroSeDCGanha >= 0 ? "#34d399" : "#fb7185"}
+                color={bdcCalc.lucroSeDCGanha >= 0 ? "#00e676" : "#ff5a6a"}
               />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
@@ -1000,7 +1000,7 @@ export default function Calculadora() {
                   { label: "Back ganhou", odd: Number(bdc.backOdd) || null, stakeNative: Number(bdc.backStake) || 0, moeda: bdc.backMoeda, freebet: !!bdc.freebet, lucro: bdcCalc.lucroSeBackGanha, stakeBRL: bdcCalc.backStakeBRLReal, payoutBRL: bdcCalc.payoutBack, cashbackBRL: bdcCalc.cashbackBackValor },
                   { label: "Dupla Chance ganhou", odd: bdcCalc.dcOddMedia || null, stakeNative: bdcCalc.dcStakeBRL / fator(bdc.dcMoeda), moeda: bdc.dcMoeda, lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
                 ])}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
               >
                 <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
               </button>
@@ -1011,9 +1011,9 @@ export default function Calculadora() {
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginBottom: 18 }}>
             {/* BACK */}
-            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+            <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#34d399" }}>Back (a favor)</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#00e676" }}>Back (a favor)</div>
                 <SeletorMoeda value={bl.backMoeda} onChange={(m) => updateBl({ backMoeda: m })} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
@@ -1021,17 +1021,17 @@ export default function Calculadora() {
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.backComissao} onChange={(e) => updateBl({ backComissao: e.target.value })} className="input-field" /></Campo>
               </div>
               <Campo label={`Stake (${sim(bl.backMoeda)})`}><input type="number" step="0.01" value={bl.backStake} onChange={(e) => updateBl({ backStake: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
                 <input type="checkbox" checked={bl.freebet} onChange={(e) => updateBl({ freebet: e.target.checked })} />
                 Essa é uma aposta grátis (freebet) — stake não é devolvida
               </label>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 8, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
                 <input type="checkbox" checked={bl.cashbackAtivo} onChange={(e) => updateBl({ cashbackAtivo: e.target.checked })} />
                 O Back gera cashback se perder
               </label>
               {bl.cashbackAtivo && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: 10, background: "rgba(251,191,36,.02)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(0,230,118,.2)", borderRadius: 8, padding: 10, background: "rgba(0,230,118,.02)" }}>
                   <Campo label="Cashback (%)"><input type="number" step="0.01" value={bl.cashbackPct} onChange={(e) => updateBl({ cashbackPct: e.target.value })} className="input-field" /></Campo>
                   <Campo label="Conversão (%)"><input type="number" step="0.01" value={bl.conversaoPct} onChange={(e) => updateBl({ conversaoPct: e.target.value })} className="input-field" /></Campo>
                   <div style={{ gridColumn: "1 / -1" }}>
@@ -1042,9 +1042,9 @@ export default function Calculadora() {
             </div>
 
             {/* LAY */}
-            <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14 }}>
+            <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>Lay (contra / exchange)</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#ff5a6a" }}>Lay (contra / exchange)</div>
                 <SeletorMoeda value={bl.layMoeda} onChange={(m) => updateBl({ layMoeda: m })} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
@@ -1052,11 +1052,11 @@ export default function Calculadora() {
                 <Campo label="Comissão (%)"><input type="number" step="0.01" value={bl.layComissao} onChange={(e) => updateBl({ layComissao: e.target.value })} className="input-field" /></Campo>
               </div>
 
-              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 6 }}>
-                Sugestão de stake total: <span className="mono" style={{ color: "#fbbf24" }}>{fmtMoeda(blCalc.layStakeAutoNative, bl.layMoeda)}</span>
+              <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 6 }}>
+                Sugestão de stake total: <span className="mono" style={{ color: "#00e676" }}>{fmtMoeda(blCalc.layStakeAutoNative, bl.layMoeda)}</span>
               </div>
 
-              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 4 }}>
                 Preenchimentos reais (odd + stake, caso não feche tudo de uma vez)
               </label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
@@ -1064,23 +1064,23 @@ export default function Calculadora() {
                   <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <input type="number" step="0.01" value={e.odd} onChange={(ev) => updateLayEntrada(e.id, { odd: ev.target.value })} placeholder="odd" className="input-field" style={{ width: 70 }} />
                     <input type="number" step="0.01" value={e.stake} onChange={(ev) => updateLayEntrada(e.id, { stake: ev.target.value })} placeholder="stake" className="input-field" style={{ flex: 1 }} />
-                    <button onClick={() => removeLayEntrada(e.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={13} /></button>
+                    <button onClick={() => removeLayEntrada(e.id)} style={{ background: "none", border: "none", color: "#4a5080" }}><X size={13} /></button>
                   </div>
                 ))}
               </div>
-              <button onClick={addLayEntrada} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#f87171", background: "none", border: "1px dashed rgba(248,113,113,.4)", borderRadius: 6, padding: "4px 8px", marginBottom: 8 }}>
+              <button onClick={addLayEntrada} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#ff5a6a", background: "none", border: "1px dashed rgba(248,113,113,.4)", borderRadius: 6, padding: "4px 8px", marginBottom: 8 }}>
                 <Plus size={11} /> adicionar preenchimento
               </button>
 
               {blCalc.temPreenchimento ? (
-                <div style={{ fontSize: 11, color: "#71717a", marginBottom: 8 }} className="mono">
+                <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 8 }} className="mono">
                   Odd média conseguida: <span style={{ color: "#e4e4e7" }}>{blCalc.layOddMedia.toFixed(4)}</span> · Preenchido: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(blCalc.totalPreenchidoNative, bl.layMoeda)}</span>
                   {blCalc.faltandoAtribuirNative > 0.01 && (
-                    <div style={{ color: "#fbbf24", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <div style={{ color: "#00e676", marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <span>Faltam atribuir ≈ {fmtMoeda(blCalc.faltandoAtribuirNative, bl.layMoeda)}</span>
                       <button
                         onClick={() => setBl((prev) => ({ ...prev, layEntradas: [...prev.layEntradas, { id: uid(), odd: prev.layOdd, stake: blCalc.faltandoAtribuirNative.toFixed(2) }] }))}
-                        style={{ fontSize: 10, color: "#fbbf24", background: "none", border: "1px dashed rgba(251,191,36,.4)", borderRadius: 6, padding: "2px 6px" }}
+                        style={{ fontSize: 10, color: "#00e676", background: "none", border: "1px dashed rgba(0,230,118,.4)", borderRadius: 6, padding: "2px 6px" }}
                       >
                         completar com odd alvo
                       </button>
@@ -1088,20 +1088,20 @@ export default function Calculadora() {
                   )}
                 </div>
               ) : (
-                <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 8 }}>Sem preenchimentos ainda — usando a sugestão automática acima para o cálculo.</div>
+                <div style={{ fontSize: 10.5, color: "#6b7099", marginBottom: 8 }}>Sem preenchimentos ainda — usando a sugestão automática acima para o cálculo.</div>
               )}
 
-              <div style={{ marginTop: 4, fontSize: 11.5, color: "#71717a" }}>
-                Responsabilidade: <span className="mono" style={{ color: "#f87171" }}>{fmtMoeda(blCalc.liabilityNative, bl.layMoeda)}</span>
-                {bl.layMoeda !== "BRL" && <span style={{ color: "#52525b" }}> ({fmt(blCalc.liabilityBRL)})</span>}
+              <div style={{ marginTop: 4, fontSize: 11.5, color: "#8b90b3" }}>
+                Responsabilidade: <span className="mono" style={{ color: "#ff5a6a" }}>{fmtMoeda(blCalc.liabilityNative, bl.layMoeda)}</span>
+                {bl.layMoeda !== "BRL" && <span style={{ color: "#6b7099" }}> ({fmt(blCalc.liabilityBRL)})</span>}
               </div>
               {bl.cashbackAtivo && (
-                <div style={{ marginTop: 6, fontSize: 11.5, color: "#71717a" }}>
-                  Cashback estimado (se o Back perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(blCalc.cashbackValor)}</span>
+                <div style={{ marginTop: 6, fontSize: 11.5, color: "#8b90b3" }}>
+                  Cashback estimado (se o Back perder): <span className="mono" style={{ color: "#f59e0b" }}>{fmt(blCalc.cashbackValor)}</span>
                 </div>
               )}
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 8, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
                 <input type="checkbox" checked={bl.layCashbackAtivo} onChange={(e) => updateBl({ layCashbackAtivo: e.target.checked })} />
                 O Lay gera cashback se perder
               </label>
@@ -1112,8 +1112,8 @@ export default function Calculadora() {
                   <div style={{ gridColumn: "1 / -1" }}>
                     <Campo label="Teto do cashback (R$, vazio = sem limite)"><input type="number" step="0.01" value={bl.layTeto} onChange={(e) => updateBl({ layTeto: e.target.value })} placeholder="sem limite" className="input-field" /></Campo>
                   </div>
-                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#71717a" }}>
-                    Cashback estimado (se o Lay perder): <span className="mono" style={{ color: "#fbbf24" }}>{fmt(blCalc.layCashbackValor)}</span>
+                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#8b90b3" }}>
+                    Cashback estimado (se o Lay perder): <span className="mono" style={{ color: "#f59e0b" }}>{fmt(blCalc.layCashbackValor)}</span>
                   </div>
                 </div>
               )}
@@ -1121,23 +1121,23 @@ export default function Calculadora() {
           </div>
 
           {/* resultado */}
-          <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+          <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 18 }}>
             <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultado (em reais)</h2>
-            <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Valores convertidos pela cotação atual pra dar pra comparar Back e Lay em moedas diferentes.</p>
+            <p style={{ fontSize: 11, color: "#6b7099", marginBottom: 14 }}>Valores convertidos pela cotação atual pra dar pra comparar Back e Lay em moedas diferentes.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 14 }}>
               <Metric label="Aposta total" value={fmtR(blCalc.apostaTotal)} />
-              <Metric label="Responsabilidade (lay)" value={fmtR(blCalc.liabilityBRL)} color="#f87171" />
+              <Metric label="Responsabilidade (lay)" value={fmtR(blCalc.liabilityBRL)} color="#ff5a6a" />
               <Metric
                 label="Lucro se SAIR (back ganha)"
                 value={fmtR(blCalc.lucroSeSair)}
                 sub={blCalc.apostaTotal ? `${((blCalc.lucroSeSair / blCalc.apostaTotal) * 100).toFixed(2)}%` : null}
-                color={blCalc.lucroSeSair >= 0 ? "#34d399" : "#fb7185"}
+                color={blCalc.lucroSeSair >= 0 ? "#00e676" : "#ff5a6a"}
               />
               <Metric
                 label="Lucro se NÃO SAIR (lay ganha)"
                 value={fmtR(blCalc.lucroSeNaoSair)}
                 sub={blCalc.apostaTotal ? `${((blCalc.lucroSeNaoSair / blCalc.apostaTotal) * 100).toFixed(2)}%` : null}
-                color={blCalc.lucroSeNaoSair >= 0 ? "#34d399" : "#fb7185"}
+                color={blCalc.lucroSeNaoSair >= 0 ? "#00e676" : "#ff5a6a"}
               />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
@@ -1146,7 +1146,7 @@ export default function Calculadora() {
                   { label: "Saiu (back ganhou)", odd: Number(bl.backOdd) || null, stakeNative: Number(bl.backStake) || 0, moeda: bl.backMoeda, freebet: !!bl.freebet, stakeBRL: Number(bl.backStake || 0) * fator(bl.backMoeda), lucro: blCalc.lucroSeSair },
                   { label: "Não saiu (lay ganhou)", odd: blCalc.layOddMedia || null, stakeNative: blCalc.layStakeBRL / fator(bl.layMoeda), moeda: bl.layMoeda, stakeBRL: blCalc.layStakeBRL, lucro: blCalc.lucroSeNaoSair },
                 ])}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
               >
                 <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
               </button>
@@ -1157,7 +1157,7 @@ export default function Calculadora() {
       <>
       {/* header casas */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#71717a" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#8b90b3" }}>
           <span>Stake total alvo (se nenhuma stake estiver travada):</span>
           <input type="number" value={targetTotal} onChange={(e) => setTargetTotal(e.target.value)} className="input-field" style={{ width: 100 }} />
           <SeletorMoeda value={targetMoeda} onChange={setTargetMoeda} />
@@ -1168,26 +1168,26 @@ export default function Calculadora() {
       </div>
 
       {/* vínculo com o jogo (pra conferência automática do resultado depois) */}
-      <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 14, marginBottom: 18 }}>
+      <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 14, marginBottom: 18 }}>
         {jogo ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <div style={{ fontSize: 13, color: "#e4e4e7" }}>
               ⚽ <strong>{jogo.home}</strong> x <strong>{jogo.away}</strong>
-              <span style={{ color: "#71717a", marginLeft: 8, fontSize: 11.5 }}>{jogo.liga} · {jogo.data}</span>
+              <span style={{ color: "#8b90b3", marginLeft: 8, fontSize: 11.5 }}>{jogo.liga} · {jogo.data}</span>
             </div>
-            <button onClick={() => setJogo(null)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#71717a", background: "none", border: "1px solid #27292e", borderRadius: 6, padding: "4px 9px" }}>
+            <button onClick={() => setJogo(null)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#8b90b3", background: "none", border: "1px solid #2a2f52", borderRadius: 6, padding: "4px 9px" }}>
               <X size={11} /> desvincular
             </button>
           </div>
         ) : (
           <>
-            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 6 }}>
+            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 6 }}>
               Vincular a um jogo (pra conferir o resultado depois automaticamente)
             </label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input type="text" value={buscaTime} onChange={(e) => setBuscaTime(e.target.value)} placeholder="nome de um dos times (ex: Itália)" className="input-field" style={{ flex: 1, minWidth: 160 }} />
               <input type="date" value={buscaData} onChange={(e) => setBuscaData(e.target.value)} className="input-field" style={{ width: 150 }} />
-              <button onClick={buscarJogos} disabled={buscando} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}>
+              <button onClick={buscarJogos} disabled={buscando} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}>
                 {buscando ? "buscando…" : "Buscar"}
               </button>
             </div>
@@ -1197,16 +1197,16 @@ export default function Calculadora() {
                   <button
                     key={m.id}
                     onClick={() => selecionarJogo(m)}
-                    style={{ textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "1px solid #27292e", background: "#0b0d10", color: "#e4e4e7", fontSize: 12.5 }}
+                    style={{ textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "1px solid #2a2f52", background: "#0b0e1d", color: "#e4e4e7", fontSize: 12.5 }}
                   >
                     <strong>{m.homeTeam?.name}</strong> x <strong>{m.awayTeam?.name}</strong>
-                    <span style={{ color: "#71717a", marginLeft: 6 }}>{m.competition?.name} · {(m.utcDate || "").slice(0, 10)}</span>
+                    <span style={{ color: "#8b90b3", marginLeft: 6 }}>{m.competition?.name} · {(m.utcDate || "").slice(0, 10)}</span>
                   </button>
                 ))}
               </div>
             )}
             {!buscando && jogosEncontrados.length === 0 && buscaTime && (
-              <div style={{ fontSize: 11, color: "#52525b", marginTop: 6 }}>Clica em "Buscar" pra ver os jogos encontrados nessa data.</div>
+              <div style={{ fontSize: 11, color: "#6b7099", marginTop: 6 }}>Clica em "Buscar" pra ver os jogos encontrados nessa data.</div>
             )}
           </>
         )}
@@ -1215,12 +1215,12 @@ export default function Calculadora() {
       {/* cards das casas */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 14, marginBottom: 18 }}>
         {casas.map((c, idx) => (
-          <div key={c.id} style={{ borderRadius: 10, border: `1px solid ${c.fixado ? "rgba(251,191,36,.4)" : "#27292e"}`, background: c.fixado ? "rgba(251,191,36,.03)" : "rgba(24,24,27,.4)", padding: 14 }}>
+          <div key={c.id} style={{ borderRadius: 10, border: `1px solid ${c.fixado ? "rgba(0,230,118,.4)" : "#2a2f52"}`, background: c.fixado ? "rgba(0,230,118,.03)" : "rgba(26,30,58,.9)", padding: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <span style={{ fontSize: 11.5, fontWeight: 500, color: "#2dd4bf" }}>Casa {idx + 1}</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <SeletorMoeda value={c.moeda} onChange={(m) => updateCasa(c.id, { moeda: m })} />
-                {casas.length > 2 && <button onClick={() => removeCasa(c.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={14} /></button>}
+                {casas.length > 2 && <button onClick={() => removeCasa(c.id)} style={{ background: "none", border: "none", color: "#4a5080" }}><X size={14} /></button>}
               </div>
             </div>
 
@@ -1228,7 +1228,7 @@ export default function Calculadora() {
 
             {jogo && (
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 3 }}>Essa casa é...</label>
+                <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 3 }}>Essa casa é...</label>
                 <div style={{ display: "flex", gap: 4 }}>
                   {[
                     { v: "mandante", label: jogo.home },
@@ -1238,7 +1238,7 @@ export default function Calculadora() {
                     <button
                       key={opt.v}
                       onClick={() => updateCasa(c.id, { selecao: c.selecao === opt.v ? "" : opt.v })}
-                      style={{ flex: 1, padding: "5px 4px", borderRadius: 6, fontSize: 10.5, fontWeight: 600, border: `1px solid ${c.selecao === opt.v ? "#fbbf24" : "#27292e"}`, background: c.selecao === opt.v ? "rgba(251,191,36,.12)" : "transparent", color: c.selecao === opt.v ? "#fbbf24" : "#71717a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      style={{ flex: 1, padding: "5px 4px", borderRadius: 6, fontSize: 10.5, fontWeight: 600, border: `1px solid ${c.selecao === opt.v ? "#00e676" : "#2a2f52"}`, background: c.selecao === opt.v ? "rgba(0,230,118,.12)" : "transparent", color: c.selecao === opt.v ? "#00e676" : "#8b90b3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     >
                       {opt.label}
                     </button>
@@ -1251,7 +1251,7 @@ export default function Calculadora() {
               <Campo label="Comissão (%)"><input type="number" step="0.01" value={c.comissao} onChange={(e) => updateCasa(c.id, { comissao: e.target.value })} placeholder="0" className="input-field" /></Campo>
             </div>
 
-            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 4 }}>
+            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 4 }}>
               Entradas (odd + stake em {sim(c.moeda)})
             </label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }}>
@@ -1267,12 +1267,12 @@ export default function Calculadora() {
                   <button
                     onClick={() => resolverEntrada(c.id, e.id)}
                     title="calcular valor necessário pra equilibrar com outra casa travada"
-                    style={{ padding: 6, borderRadius: 6, border: "1px solid #27292e", background: "none", color: "#fbbf24", flexShrink: 0 }}
+                    style={{ padding: 6, borderRadius: 6, border: "1px solid #2a2f52", background: "none", color: "#00e676", flexShrink: 0 }}
                   >
                     <Calculator size={12} />
                   </button>
                   {c.entradas.length > 1 && (
-                    <button onClick={() => removeEntrada(c.id, e.id)} style={{ background: "none", border: "none", color: "#3f3f46" }}><X size={13} /></button>
+                    <button onClick={() => removeEntrada(c.id, e.id)} style={{ background: "none", border: "none", color: "#4a5080" }}><X size={13} /></button>
                   )}
                 </div>
               ))}
@@ -1282,34 +1282,34 @@ export default function Calculadora() {
             </button>
 
             {c.entradas.length > 1 && (
-              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 4 }} className="mono">
+              <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 4 }} className="mono">
                 Odd média: <span style={{ color: "#e4e4e7" }}>{totaisCasa(c).oddMedia.toFixed(4)}</span> · Stake total: <span style={{ color: "#e4e4e7" }}>{fmtMoeda(totaisCasa(c).totalStake, c.moeda)}</span>
               </div>
             )}
             {c.moeda !== "BRL" && (
-              <div style={{ fontSize: 10.5, color: "#52525b", marginBottom: 8 }} className="mono">
+              <div style={{ fontSize: 10.5, color: "#6b7099", marginBottom: 8 }} className="mono">
                 ≈ {fmt(totaisCasa(c).totalStake * usdToBrl)}
               </div>
             )}
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-              <button onClick={() => updateCasa(c.id, { fixado: !c.fixado })} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: c.fixado ? "#fbbf24" : "#27292e", color: c.fixado ? "#0b0d10" : "#a1a1aa", border: "none" }}>
+              <button onClick={() => updateCasa(c.id, { fixado: !c.fixado })} style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: c.fixado ? "#00e676" : "#2a2f52", color: c.fixado ? "#0b0e1d" : "#b4b9d6", border: "none" }}>
                 {c.fixado ? <Lock size={11} /> : <Unlock size={11} />} {c.fixado ? "Travada" : "Travar"}
               </button>
             </div>
 
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, marginBottom: 8, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
               <input type="checkbox" checked={c.freebet} onChange={(e) => updateCasa(c.id, { freebet: e.target.checked })} />
               Essa é uma aposta grátis (freebet) — stake não é devolvida
             </label>
 
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12, color: "#a1a1aa", cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12, color: "#b4b9d6", cursor: "pointer" }}>
               <input type="checkbox" checked={c.cashback_ativo} onChange={(e) => updateCasa(c.id, { cashback_ativo: e.target.checked })} />
               Esta entrada gera cashback
             </label>
 
             {c.cashback_ativo && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: 10, background: "rgba(251,191,36,.02)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, border: "1px solid rgba(0,230,118,.2)", borderRadius: 8, padding: 10, background: "rgba(0,230,118,.02)" }}>
                 <Campo label="Cashback (%)"><input type="number" step="0.01" value={c.cashback_pct} onChange={(e) => updateCasa(c.id, { cashback_pct: e.target.value })} className="input-field" /></Campo>
                 <Campo label="Conversão (%)"><input type="number" step="0.01" value={c.conversao_pct} onChange={(e) => updateCasa(c.id, { conversao_pct: e.target.value })} className="input-field" /></Campo>
                 <div style={{ gridColumn: "1 / -1" }}>
@@ -1322,44 +1322,44 @@ export default function Calculadora() {
               <Campo label={`Pagamento antecipado recebido — total (2UP, ${sim(c.moeda)}) — opcional`}>
                 <input type="number" step="0.01" value={c.pagamento_antecipado} onChange={(e) => updateCasa(c.id, { pagamento_antecipado: e.target.value })} placeholder="0,00" className="input-field" />
               </Campo>
-              <div style={{ fontSize: 10.5, color: "#52525b", marginTop: 3 }}>
+              <div style={{ fontSize: 10.5, color: "#6b7099", marginTop: 3 }}>
                 O valor TOTAL pago ("ganhos possíveis"), não só o lucro — ex: apostou 1.094 a 1,83 → coloque 2.002,02
               </div>
             </div>
           </div>
         ))}
 
-        <button onClick={addCasa} style={{ borderRadius: 10, border: "1px dashed #3f3f46", color: "#71717a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 120, background: "none" }}>
+        <button onClick={addCasa} style={{ borderRadius: 10, border: "1px dashed #4a5080", color: "#8b90b3", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 120, background: "none" }}>
           <Plus size={18} /> <span style={{ fontSize: 11 }}>adicionar casa</span>
         </button>
       </div>
 
       {temMultiplasFixadas && (
-        <div style={{ fontSize: 11.5, color: "rgba(251,191,36,.8)", marginBottom: 14 }}>
+        <div style={{ fontSize: 11.5, color: "rgba(0,230,118,.8)", marginBottom: 14 }}>
           Mais de uma stake travada — o equilíbrio perfeito entre todos os resultados pode não ser possível; a primeira travada é usada como referência.
         </div>
       )}
 
       {/* resumo */}
-      <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 18 }}>
+      <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 18 }}>
         <h2 style={{ fontSize: 13, fontWeight: 600, color: "#d4d4d8", marginBottom: 4 }}>Resultados (em reais)</h2>
-        <p style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Cada casa mantém sua moeda de entrada; aqui tudo é convertido pra reais pra dar pra comparar.</p>
+        <p style={{ fontSize: 11, color: "#6b7099", marginBottom: 14 }}>Cada casa mantém sua moeda de entrada; aqui tudo é convertido pra reais pra dar pra comparar.</p>
         {resultados.totalPagamentosAntecipados > 0 && (
-          <div style={{ fontSize: 12, color: "#fbbf24", marginBottom: 14, background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.2)", borderRadius: 8, padding: "8px 12px" }}>
+          <div style={{ fontSize: 12, color: "#00e676", marginBottom: 14, background: "rgba(0,230,118,.06)", border: "1px solid rgba(0,230,118,.2)", borderRadius: 8, padding: "8px 12px" }}>
             Pagamento antecipado (2UP) somado: <strong className="mono">{fmt(resultados.totalPagamentosAntecipados)}</strong> — já incluído como lucro garantido em todas as linhas abaixo, independente do resultado final.
           </div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 14, marginBottom: 18 }}>
           <Metric label="Stake Total" value={fmtR(resultados.stakeTotal)} />
-          <Metric label="Pior caso" value={fmtR(resultados.pior)} color={resultados.pior >= 0 ? "#34d399" : "#fb7185"} />
-          <Metric label="Melhor caso" value={fmtR(resultados.melhor)} color="#34d399" />
+          <Metric label="Pior caso" value={fmtR(resultados.pior)} color={resultados.pior >= 0 ? "#00e676" : "#ff5a6a"} />
+          <Metric label="Melhor caso" value={fmtR(resultados.melhor)} color="#00e676" />
           <Metric label="ROI min/max" value={`${resultados.roiMin.toFixed(2)}% / ${resultados.roiMax.toFixed(2)}%`} />
         </div>
 
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ color: "#71717a", borderBottom: "1px solid #27292e" }}>
+              <tr style={{ color: "#8b90b3", borderBottom: "1px solid #2a2f52" }}>
                 <th style={{ textAlign: "left", padding: "6px 4px", fontWeight: 500 }}>Mercado</th>
                 <th style={{ textAlign: "right", padding: "6px 4px", fontWeight: 500 }}>Odd</th>
                 <th style={{ textAlign: "right", padding: "6px 4px", fontWeight: 500 }}>Comissão</th>
@@ -1372,7 +1372,7 @@ export default function Calculadora() {
             </thead>
             <tbody>
               {resultados.linhas.map((l) => (
-                <tr key={l.id} style={{ borderBottom: "1px solid #1c1c1f" }}>
+                <tr key={l.id} style={{ borderBottom: "1px solid #23274a" }}>
                   <td style={{ padding: "8px 4px", color: "#e4e4e7", fontWeight: 500 }}>{l.nome || "—"}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">
                     {l.oddMedia ? l.oddMedia.toFixed(l.numEntradas > 1 ? 4 : 2) : "-"}
@@ -1380,12 +1380,12 @@ export default function Calculadora() {
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">{l.comissao}%</td>
                   <td style={{ padding: "8px 4px", textAlign: "right" }} className="mono">
                     {fmtMoeda(l.stakeNative, l.moeda)}
-                    {l.moeda !== "BRL" && <div style={{ fontSize: 10, color: "#52525b" }}>≈ {fmt(l.stakeBRL)}</div>}
+                    {l.moeda !== "BRL" && <div style={{ fontSize: 10, color: "#6b7099" }}>≈ {fmt(l.stakeBRL)}</div>}
                   </td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#c084fc" }} className="mono">{l.cashbackPct ? `${l.cashbackPct}%` : "-"}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "right", color: l.deficit >= 0 ? "#34d399" : "#fb7185" }} className="mono">{l.deficit >= 0 ? "+" : ""}{fmtR(l.deficit)}</td>
+                  <td style={{ padding: "8px 4px", textAlign: "right", color: l.deficit >= 0 ? "#00e676" : "#ff5a6a" }} className="mono">{l.deficit >= 0 ? "+" : ""}{fmtR(l.deficit)}</td>
                   <td style={{ padding: "8px 4px", textAlign: "right", color: "#38bdf8" }} className="mono">{l.seguro > 0 ? `+${fmtR(l.seguro)}` : fmtR(0)}</td>
-                  <td style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600, color: l.lucro >= 0 ? "#34d399" : "#fb7185" }} className="mono">
+                  <td style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600, color: l.lucro >= 0 ? "#00e676" : "#ff5a6a" }} className="mono">
                     {l.lucro >= 0 ? "+" : ""}{fmtR(l.lucro)}
                     <div style={{ fontSize: 10.5, fontWeight: 400, opacity: 0.75 }}>{l.roi >= 0 ? "+" : ""}{l.roi.toFixed(2)}%</div>
                   </td>
@@ -1412,7 +1412,7 @@ export default function Calculadora() {
               })),
               jogo
             )}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
           >
             <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
           </button>
@@ -1427,7 +1427,7 @@ export default function Calculadora() {
 function Campo({ label, children }) {
   return (
     <div>
-      <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#71717a", fontWeight: 500, display: "block", marginBottom: 3 }}>{label}</label>
+      <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 3 }}>{label}</label>
       {children}
     </div>
   );
@@ -1436,7 +1436,7 @@ function Campo({ label, children }) {
 function Metric({ label, value, sub, color = "#e4e4e7" }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 11, color: "#8b90b3", marginBottom: 2 }}>{label}</div>
       <div className="mono" style={{ fontSize: 17, fontWeight: 700, color }}>{value}</div>
       {sub && <div className="mono" style={{ fontSize: 11, color, opacity: 0.75, marginTop: 1 }}>{sub}</div>}
     </div>

@@ -52,6 +52,7 @@ export default function Calculadora() {
   const [salvos, setSalvos] = useState([]);
   const [mostrarSalvos, setMostrarSalvos] = useState(false);
   const [saveState, setSaveState] = useState("idle");
+  const [saveErro, setSaveErro] = useState("");
 
   // ---------- cotação USD -> BRL ----------
   const [rate, setRate] = useState(null); // { value, updatedAt }
@@ -281,6 +282,8 @@ export default function Calculadora() {
   }, [dg, usdToBrl, eurToBrl]);
 
   const [lancamento, setLancamento] = useState("idle"); // idle | saving | saved
+  // nome da operação: jogo escolhido > nome digitado no cálculo > padrão do modo
+  const nomeOp = (padrao) => (jogo ? `${jogo.home} x ${jogo.away}` : (nomeCalculo.trim() || padrao));
   const lancarOperacao = async (descricao, tipo, apostado, opcoes, jogoInfo = null) => {
     setLancamento("saving");
     const { error } = await supabase.from("operacoes").insert({
@@ -297,6 +300,7 @@ export default function Calculadora() {
       evento_liga: jogoInfo?.liga || null,
       evento_data: jogoInfo?.data || null,
     });
+    if (error) alert("Erro ao lançar operação: " + error.message);
     setLancamento(error ? "idle" : "saved");
     setTimeout(() => setLancamento("idle"), 1500);
   };
@@ -433,12 +437,14 @@ export default function Calculadora() {
         }
       : { modo: "multiplas", stake_total_alvo: targetTotal, stake_total_alvo_moeda: targetMoeda };
 
+    setSaveErro("");
     if (calculoId) {
-      await supabase.from("calculos").update({ nome: nomeCalculo, ...camposBase, atualizado_em: new Date().toISOString() }).eq("id", calculoId);
+      const { error: upErr } = await supabase.from("calculos").update({ nome: nomeCalculo, ...camposBase, atualizado_em: new Date().toISOString() }).eq("id", calculoId);
+      if (upErr) { setSaveErro(upErr.message); setSaveState("error"); setTimeout(() => setSaveState("idle"), 6000); return; }
       if (modo === "multiplas") await supabase.from("casas_calculo").delete().eq("calculo_id", calculoId);
     } else {
       const { data, error } = await supabase.from("calculos").insert({ nome: nomeCalculo || "Sem nome", ...camposBase }).select().single();
-      if (error || !data) { setSaveState("error"); setTimeout(() => setSaveState("idle"), 1200); return; }
+      if (error || !data) { setSaveErro(error?.message || "sem resposta"); setSaveState("error"); setTimeout(() => setSaveState("idle"), 6000); return; }
       calculoId = data.id;
       setCalculoAtualId(calculoId);
     }
@@ -725,7 +731,7 @@ export default function Calculadora() {
         <span style={{ fontSize: 11, color: "#6b7099" }} className="mono">
           {saveState === "saving" && "salvando…"}
           {saveState === "saved" && <span style={{ color: "#00e676" }}>salvo</span>}
-          {saveState === "error" && <span style={{ color: "#ff5a6a" }}>erro ao salvar</span>}
+          {saveState === "error" && <span style={{ color: "#ff5a6a" }}>erro ao salvar{saveErro ? `: ${saveErro}` : ""}</span>}
         </span>
       </div>
 
@@ -853,10 +859,10 @@ export default function Calculadora() {
                 )}
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
                   <button
-                    onClick={() => lancarOperacao("Duplo Green 2UP", "dg2up", dg.investimento, [
+                    onClick={() => lancarOperacao(nomeOp("Duplo Green 2UP"), "dg2up", dg.investimento, [
                       { label: "Manteve a vitória (PA)", lucro: dgCalc.lucroSeManter, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
                       { label: "Saiu Duplo Green", lucro: dgCalc.lucroSeDuploGreen, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
-                    ])}
+                    ], jogo)}
                     style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
                   >
                     <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
@@ -996,10 +1002,10 @@ export default function Calculadora() {
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
               <button
-                onClick={() => lancarOperacao("Back + Dupla Chance", "backdc", bdcCalc.stakeTotal, [
+                onClick={() => lancarOperacao(nomeOp("Back + Dupla Chance"), "backdc", bdcCalc.stakeTotal, [
                   { label: "Back ganhou", odd: Number(bdc.backOdd) || null, stakeNative: Number(bdc.backStake) || 0, moeda: bdc.backMoeda, freebet: !!bdc.freebet, lucro: bdcCalc.lucroSeBackGanha, stakeBRL: bdcCalc.backStakeBRLReal, payoutBRL: bdcCalc.payoutBack, cashbackBRL: bdcCalc.cashbackBackValor },
                   { label: "Dupla Chance ganhou", odd: bdcCalc.dcOddMedia || null, stakeNative: bdcCalc.dcStakeBRL / fator(bdc.dcMoeda), moeda: bdc.dcMoeda, lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
-                ])}
+                ], jogo)}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
               >
                 <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
@@ -1142,10 +1148,10 @@ export default function Calculadora() {
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
               <button
-                onClick={() => lancarOperacao("Back x Lay", "backlay", blCalc.apostaTotal, [
+                onClick={() => lancarOperacao(nomeOp("Back x Lay"), "backlay", blCalc.apostaTotal, [
                   { label: "Saiu (back ganhou)", odd: Number(bl.backOdd) || null, stakeNative: Number(bl.backStake) || 0, moeda: bl.backMoeda, freebet: !!bl.freebet, stakeBRL: Number(bl.backStake || 0) * fator(bl.backMoeda), lucro: blCalc.lucroSeSair },
                   { label: "Não saiu (lay ganhou)", odd: blCalc.layOddMedia || null, stakeNative: blCalc.layStakeBRL / fator(bl.layMoeda), moeda: bl.layMoeda, stakeBRL: blCalc.layStakeBRL, lucro: blCalc.lucroSeNaoSair },
-                ])}
+                ], jogo)}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
               >
                 <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}

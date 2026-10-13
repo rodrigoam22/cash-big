@@ -360,6 +360,9 @@ export default function Operacoes() {
     } else if (o.stakeBRL != null) {
       partes.push(`stake ${fmtBRL(o.stakeBRL)}`);
     }
+    if (Array.isArray(o.entradas) && o.entradas.length > 1) {
+      partes.push(o.entradas.map((e) => `${moedaTxt(e.stake, e.moeda || "BRL")}${e.odd ? " @" + Number(e.odd).toFixed(2) : ""}`).join(" + "));
+    }
     if (o.freebet) partes.push("freebet");
     return partes.join(" · ");
   };

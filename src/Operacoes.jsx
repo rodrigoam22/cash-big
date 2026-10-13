@@ -56,7 +56,7 @@ export default function Operacoes() {
     setLoading(true);
     const { data } = await supabase.from("operacoes").select("*").gte("data", inicioMes).lte("data", fimMes).order("data", { ascending: true });
     setOperacoes(data || []);
-    const { data: todas } = await supabase.from("operacoes").select("id,data,tipo,apostado,lucro,fora_media").eq("status", "finalizado");
+    const { data: todas } = await supabase.from("operacoes").select("id,data,tipo,apostado,lucro,fora_media,opcoes").eq("status", "finalizado");
     setTodasFin(todas || []);
     setLoading(false);
   }, [inicioMes, fimMes]);
@@ -70,17 +70,22 @@ export default function Operacoes() {
     setMes(novoMes); setAno(novoAno);
   };
 
+  // resultado da entrada = pior cenário previsto pela calculadora (ignora duplo/handicap/cobertura);
+  // sem opções guardadas (operação manual), usa o lucro final
+  const piorCenario = (o) => {
+    const ls = (Array.isArray(o.opcoes) ? o.opcoes : []).map((x) => Number(x.lucro)).filter((v) => Number.isFinite(v));
+    return ls.length ? Math.min(...ls) : Number(o.lucro || 0);
+  };
   const mediaPerda = useMemo(() => {
     const base = escopoMedia === "mes" ? todasFin.filter((o) => o.data >= inicioMes && o.data <= fimMes) : todasFin;
     const contadas = base.filter((o) => !o.fora_media);
-    const soma = (arr, k) => arr.reduce((a, o) => a + Number(o[k] || 0), 0);
-    const lucro = soma(contadas, "lucro");
-    const apostado = soma(contadas, "apostado");
+    const lucro = contadas.reduce((a, o) => a + piorCenario(o), 0);
+    const apostado = contadas.reduce((a, o) => a + Number(o.apostado || 0), 0);
     const porTipo = {};
     contadas.forEach((o) => {
       const t = o.tipo || "manual";
       porTipo[t] = porTipo[t] || { n: 0, lucro: 0, apostado: 0 };
-      porTipo[t].n += 1; porTipo[t].lucro += Number(o.lucro || 0); porTipo[t].apostado += Number(o.apostado || 0);
+      porTipo[t].n += 1; porTipo[t].lucro += piorCenario(o); porTipo[t].apostado += Number(o.apostado || 0);
     });
     return { n: contadas.length, fora: base.length - contadas.length, lucro, apostado, pct: apostado ? (lucro / apostado) * 100 : 0, porJogo: contadas.length ? lucro / contadas.length : 0, porTipo };
   }, [todasFin, escopoMedia, inicioMes, fimMes]);
@@ -629,7 +634,7 @@ export default function Operacoes() {
       {/* média de perda (só operações que contam) */}
       <div style={{ borderRadius: 10, border: "1px solid #27292e", background: "rgba(24,24,27,.4)", padding: 16, marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#71717a" }}>Perda média por operação <span style={{ color: "#52525b" }}>(sem as marcadas como "fora da média")</span></div>
+          <div style={{ fontSize: 11, color: "#71717a" }}>Perda média por operação <span style={{ color: "#52525b" }}>(pior cenário previsto, sem duplo/handicap/cobertura · sem as marcadas "fora da média")</span></div>
           <div style={{ display: "flex", gap: 2, background: "#0b0d10", border: "1px solid #27292e", borderRadius: 6, padding: 2 }}>
             {[["total", "Total"], ["mes", "Mês"]].map(([v, l]) => (
               <button key={v} onClick={() => setEscopoMedia(v)} style={{ padding: "3px 9px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: escopoMedia === v ? "#fbbf24" : "transparent", color: escopoMedia === v ? "#0b0d10" : "#71717a" }}>{l}</button>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabase";
+import { buscarCotacao, lerCache } from "./cotacao";
 import { Plus, X, Copy, Lock, Unlock, RefreshCw, Save, FolderOpen, Trash2, Calculator, DollarSign, TrendingUp } from "lucide-react";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -13,8 +14,6 @@ const fmtEUR = (v) => (Number(v) || 0).toLocaleString("de-DE", { style: "currenc
 const fmtMoeda = (v, moeda) => (moeda === "USD" ? fmtUSD(v) : moeda === "EUR" ? fmtEUR(v) : fmt(v));
 const sim = (m) => (m === "USD" ? "US$" : m === "EUR" ? "€" : "R$");
 
-const RATE_CACHE_KEY = "cashbig_usdbrl_rate";
-const RATE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
 
 const novaEntrada = () => ({ id: uid(), odd: "", stake: "" });
 
@@ -60,31 +59,23 @@ export default function Calculadora() {
 
   const fetchRate = useCallback(async (force = false) => {
     if (!force) {
-      try {
-        const cached = JSON.parse(localStorage.getItem(RATE_CACHE_KEY) || "null");
-        if (cached && cached.eur && Date.now() - cached.updatedAt < RATE_MAX_AGE) {
-          setRate(cached);
-          return;
-        }
-      } catch {}
+      const cached = lerCache();
+      if (cached) { setRate(cached); return; }
     }
     setRateLoading(true);
     try {
-      const res = await fetch("https://open.er-api.com/v6/latest/USD");
-      const data = await res.json();
-      const value = data?.rates?.BRL;
-      if (value) {
-        const payload = { value, eur: data?.rates?.EUR || 0.92, updatedAt: Date.now() };
-        setRate(payload);
-        try { localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(payload)); } catch {}
-      }
+      setRate(await buscarCotacao());
     } catch (e) {
-      console.error("Erro ao buscar cotação USD/BRL", e);
+      console.error("Erro ao buscar cotação", e);
     }
     setRateLoading(false);
   }, []);
 
-  useEffect(() => { fetchRate(); }, [fetchRate]);
+  useEffect(() => {
+    fetchRate();
+    const t = setInterval(() => fetchRate(true), 5 * 60 * 1000); // atualiza sozinho a cada 5 min
+    return () => clearInterval(t);
+  }, [fetchRate]);
 
   const usdToBrl = rate?.value || 5; // fallback razoável se a busca falhar
   const usdToEur = rate?.eur || 0.92;
@@ -656,6 +647,7 @@ export default function Calculadora() {
       {rate ? (
         <>
           1 USD = {fmt(rate.value)} · 1 EUR = {fmt(eurToBrl)}
+          <span style={{ color: "#00e676" }}>· {rate.fonte || "cotação"}</span>
           <span style={{ color: "#6b7099" }}>
             · atualizada {new Date(rate.updatedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
           </span>

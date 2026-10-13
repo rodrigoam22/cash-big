@@ -273,8 +273,8 @@ export default function Calculadora() {
   }, [dg, usdToBrl, eurToBrl]);
 
   const [lancamento, setLancamento] = useState("idle"); // idle | saving | saved
-  // nome da operação: jogo escolhido > nome digitado no cálculo > padrão do modo
-  const nomeOp = (padrao) => (jogo ? `${jogo.home} x ${jogo.away}` : (nomeCalculo.trim() || padrao));
+  // nome da operação: o que foi digitado no cálculo; senão o padrão do modo
+  const nomeOp = (padrao) => (nomeCalculo.trim() || padrao);
   const lancarOperacao = async (descricao, tipo, apostado, opcoes, jogoInfo = null) => {
     setLancamento("saving");
     const { error } = await supabase.from("operacoes").insert({
@@ -296,31 +296,6 @@ export default function Calculadora() {
     setTimeout(() => setLancamento("idle"), 1500);
   };
 
-  // ---------- busca de jogo (pra conferência automática de resultado) ----------
-  const [jogo, setJogo] = useState(null); // { id, home, away, liga, data }
-  const [buscaTime, setBuscaTime] = useState("");
-  const [buscaData, setBuscaData] = useState(localDateStr());
-  const [jogosEncontrados, setJogosEncontrados] = useState([]);
-  const [buscando, setBuscando] = useState(false);
-
-  const buscarJogos = async () => {
-    if (!buscaTime.trim()) return;
-    setBuscando(true);
-    setJogosEncontrados([]);
-    try {
-      const res = await fetch(`/api/eventos?action=buscar&data=${buscaData}&time=${encodeURIComponent(buscaTime.trim())}`);
-      const data = await res.json();
-      setJogosEncontrados(data?.matches || []);
-    } catch (e) {
-      console.error("Erro ao buscar jogos", e);
-    }
-    setBuscando(false);
-  };
-
-  const selecionarJogo = (m) => {
-    setJogo({ id: m.id, home: m.homeTeam?.name, away: m.awayTeam?.name, liga: m.competition?.name, data: (m.utcDate || "").slice(0, 10) });
-    setJogosEncontrados([]);
-  };
 
   const carregarSalvos = useCallback(async () => {
     const { data } = await supabase.from("calculos").select("*").order("atualizado_em", { ascending: false });
@@ -854,7 +829,7 @@ export default function Calculadora() {
                     onClick={() => lancarOperacao(nomeOp("Duplo Green 2UP"), "dg2up", dg.investimento, [
                       { label: "Manteve a vitória (PA)", lucro: dgCalc.lucroSeManter, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
                       { label: "Saiu Duplo Green", lucro: dgCalc.lucroSeDuploGreen, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
-                    ], jogo)}
+                    ])}
                     style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
                   >
                     <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
@@ -997,7 +972,7 @@ export default function Calculadora() {
                 onClick={() => lancarOperacao(nomeOp("Back + Dupla Chance"), "backdc", bdcCalc.stakeTotal, [
                   { label: "Back ganhou", odd: Number(bdc.backOdd) || null, stakeNative: Number(bdc.backStake) || 0, moeda: bdc.backMoeda, freebet: !!bdc.freebet, lucro: bdcCalc.lucroSeBackGanha, stakeBRL: bdcCalc.backStakeBRLReal, payoutBRL: bdcCalc.payoutBack, cashbackBRL: bdcCalc.cashbackBackValor },
                   { label: "Dupla Chance ganhou", odd: bdcCalc.dcOddMedia || null, stakeNative: bdcCalc.dcStakeBRL / fator(bdc.dcMoeda), moeda: bdc.dcMoeda, lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
-                ], jogo)}
+                ])}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
               >
                 <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
@@ -1143,7 +1118,7 @@ export default function Calculadora() {
                 onClick={() => lancarOperacao(nomeOp("Back x Lay"), "backlay", blCalc.apostaTotal, [
                   { label: "Saiu (back ganhou)", odd: Number(bl.backOdd) || null, stakeNative: Number(bl.backStake) || 0, moeda: bl.backMoeda, freebet: !!bl.freebet, stakeBRL: Number(bl.backStake || 0) * fator(bl.backMoeda), lucro: blCalc.lucroSeSair },
                   { label: "Não saiu (lay ganhou)", odd: blCalc.layOddMedia || null, stakeNative: blCalc.layStakeBRL / fator(bl.layMoeda), moeda: bl.layMoeda, stakeBRL: blCalc.layStakeBRL, lucro: blCalc.lucroSeNaoSair },
-                ], jogo)}
+                ])}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
               >
                 <TrendingUp size={13} /> {lancamento === "saving" ? "lançando…" : lancamento === "saved" ? "lançado ✓" : "Lançar operação"}
@@ -1165,51 +1140,6 @@ export default function Calculadora() {
         </button>
       </div>
 
-      {/* vínculo com o jogo (pra conferência automática do resultado depois) */}
-      <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 14, marginBottom: 18 }}>
-        {jogo ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ fontSize: 13, color: "#e4e4e7" }}>
-              ⚽ <strong>{jogo.home}</strong> x <strong>{jogo.away}</strong>
-              <span style={{ color: "#8b90b3", marginLeft: 8, fontSize: 11.5 }}>{jogo.liga} · {jogo.data}</span>
-            </div>
-            <button onClick={() => setJogo(null)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#8b90b3", background: "none", border: "1px solid #2a2f52", borderRadius: 6, padding: "4px 9px" }}>
-              <X size={11} /> desvincular
-            </button>
-          </div>
-        ) : (
-          <>
-            <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 6 }}>
-              Vincular a um jogo (pra conferir o resultado depois automaticamente)
-            </label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input type="text" value={buscaTime} onChange={(e) => setBuscaTime(e.target.value)} placeholder="nome de um dos times (ex: Itália)" className="input-field" style={{ flex: 1, minWidth: 160 }} />
-              <input type="date" value={buscaData} onChange={(e) => setBuscaData(e.target.value)} className="input-field" style={{ width: 150 }} />
-              <button onClick={buscarJogos} disabled={buscando} style={{ padding: "8px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}>
-                {buscando ? "buscando…" : "Buscar"}
-              </button>
-            </div>
-            {jogosEncontrados.length > 0 && (
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                {jogosEncontrados.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => selecionarJogo(m)}
-                    style={{ textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "1px solid #2a2f52", background: "#0b0e1d", color: "#e4e4e7", fontSize: 12.5 }}
-                  >
-                    <strong>{m.homeTeam?.name}</strong> x <strong>{m.awayTeam?.name}</strong>
-                    <span style={{ color: "#8b90b3", marginLeft: 6 }}>{m.competition?.name} · {(m.utcDate || "").slice(0, 10)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {!buscando && jogosEncontrados.length === 0 && buscaTime && (
-              <div style={{ fontSize: 11, color: "#6b7099", marginTop: 6 }}>Clica em "Buscar" pra ver os jogos encontrados nessa data.</div>
-            )}
-          </>
-        )}
-      </div>
-
       {/* cards das casas */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 14, marginBottom: 18 }}>
         {casas.map((c, idx) => (
@@ -1223,27 +1153,6 @@ export default function Calculadora() {
             </div>
 
             <input value={c.nome} onChange={(e) => updateCasa(c.id, { nome: e.target.value })} placeholder="nome da casa" className="input-field" style={{ marginBottom: 10, fontWeight: 600, color: "#f4f4f5" }} />
-
-            {jogo && (
-              <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "#8b90b3", fontWeight: 500, display: "block", marginBottom: 3 }}>Essa casa é...</label>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[
-                    { v: "mandante", label: jogo.home },
-                    { v: "empate", label: "Empate" },
-                    { v: "visitante", label: jogo.away },
-                  ].map((opt) => (
-                    <button
-                      key={opt.v}
-                      onClick={() => updateCasa(c.id, { selecao: c.selecao === opt.v ? "" : opt.v })}
-                      style={{ flex: 1, padding: "5px 4px", borderRadius: 6, fontSize: 10.5, fontWeight: 600, border: `1px solid ${c.selecao === opt.v ? "#00e676" : "#2a2f52"}`, background: c.selecao === opt.v ? "rgba(0,230,118,.12)" : "transparent", color: c.selecao === opt.v ? "#00e676" : "#8b90b3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
               <Campo label="Comissão (%)"><input type="number" step="0.01" value={c.comissao} onChange={(e) => updateCasa(c.id, { comissao: e.target.value })} placeholder="0" className="input-field" /></Campo>
@@ -1396,19 +1305,17 @@ export default function Calculadora() {
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
           <button
             onClick={() => lancarOperacao(
-              jogo ? `${jogo.home} x ${jogo.away}` : (nomeCalculo.trim() || casas.map((c) => c.nome).filter(Boolean).join(" x ") || "Múltiplas casas"),
+              nomeCalculo.trim() || casas.map((c) => c.nome).filter(Boolean).join(" x ") || "Múltiplas casas",
               "multiplas",
               resultados.stakeTotal,
               resultados.linhas.map((l, i) => ({
                 label: l.nome || "Casa",
                 lucro: l.lucro,
-                selecao: casas[i]?.selecao || null,
                 odd: l.oddMedia, stakeNative: l.stakeNative, moeda: l.moeda, freebet: !!l.freebet,
                 stakeBRL: l.dinheiroRealBRL,
                 payoutBRL: l.payoutBRL,
                 cashbackBRL: l.cashbackOwnBRL,
-              })),
-              jogo
+              }))
             )}
             style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#00e676", color: "#0b0e1d", border: "none" }}
           >

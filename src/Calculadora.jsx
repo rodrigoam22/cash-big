@@ -242,10 +242,10 @@ export default function Calculadora() {
   const updateDg = (patch) => setDg((prev) => ({ ...prev, ...patch }));
 
   const dgCalc = useMemo(() => {
-    const fator = fator(dg.moeda);
+    const fx = fator(dg.moeda);
     const pNative = dg.resultadoTipo === "prejuizo" ? -Number(dg.resultadoValor || 0) : Number(dg.resultadoValor || 0);
-    const p = pNative * fator;
-    const a = Number(dg.pagamentoAntecipado || 0) * fator;
+    const p = pNative * fx;
+    const a = Number(dg.pagamentoAntecipado || 0) * fx;
     const odd = Number(dg.oddAoVivo || 0);
 
     const temDados = odd > 1.01 && (dg.resultadoValor !== "" || dg.pagamentoAntecipado !== "");
@@ -256,13 +256,13 @@ export default function Calculadora() {
     const stakeProfissionalBRL = odd > 0 ? a / odd : 0;
     // Proteção Agressiva: Profissional + 1/4 da diferença entre Profissional e Conservadora
     const stakeAgressivaBRL = stakeProfissionalBRL + (stakeProfissionalBRL - stakeConservadoraBRL) / 4;
-    const stakeCustomBRL = Number(dg.stakeCustom || 0) * fator;
+    const stakeCustomBRL = Number(dg.stakeCustom || 0) * fx;
 
     const stakeBRL = dg.modoStake === "conservadora" ? stakeConservadoraBRL
       : dg.modoStake === "agressiva" ? stakeAgressivaBRL
       : dg.modoStake === "custom" ? stakeCustomBRL
       : stakeProfissionalBRL;
-    const stakeNative = fator ? stakeBRL / fator : 0;
+    const stakeNative = fx ? stakeBRL / fx : 0;
 
     const lucroSeManterLiquido = p + stakeBRL * (odd - 1);
     const lucroSeDuploGreenLiquido = a + p - stakeBRL;
@@ -272,9 +272,9 @@ export default function Calculadora() {
     return {
       temDados, p, a,
       stakeNative,
-      stakeConservadoraNative: fator ? stakeConservadoraBRL / fator : 0,
-      stakeProfissionalNative: fator ? stakeProfissionalBRL / fator : 0,
-      stakeAgressivaNative: fator ? stakeAgressivaBRL / fator : 0,
+      stakeConservadoraNative: fx ? stakeConservadoraBRL / fx : 0,
+      stakeProfissionalNative: fx ? stakeProfissionalBRL / fx : 0,
+      stakeAgressivaNative: fx ? stakeAgressivaBRL / fx : 0,
       lucroSeManter: lucroSeManterLiquido, lucroSeDuploGreen: lucroSeDuploGreenLiquido,
       lucroSeManterLiquido, lucroSeDuploGreenLiquido, lucroSeManterBruto, lucroSeDuploGreenBruto,
     };
@@ -854,8 +854,8 @@ export default function Calculadora() {
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
                   <button
                     onClick={() => lancarOperacao("Duplo Green 2UP", "dg2up", dg.investimento, [
-                      { label: "Manteve a vitória (PA)", lucro: dgCalc.lucroSeManter },
-                      { label: "Saiu Duplo Green", lucro: dgCalc.lucroSeDuploGreen },
+                      { label: "Manteve a vitória (PA)", lucro: dgCalc.lucroSeManter, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
+                      { label: "Saiu Duplo Green", lucro: dgCalc.lucroSeDuploGreen, odd: Number(dg.oddAoVivo) || null, stakeNative: dgCalc.stakeNative, moeda: dg.moeda },
                     ])}
                     style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
                   >
@@ -997,8 +997,8 @@ export default function Calculadora() {
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
               <button
                 onClick={() => lancarOperacao("Back + Dupla Chance", "backdc", bdcCalc.stakeTotal, [
-                  { label: "Back ganhou", lucro: bdcCalc.lucroSeBackGanha, stakeBRL: bdcCalc.backStakeBRLReal, payoutBRL: bdcCalc.payoutBack, cashbackBRL: bdcCalc.cashbackBackValor },
-                  { label: "Dupla Chance ganhou", lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
+                  { label: "Back ganhou", odd: Number(bdc.backOdd) || null, stakeNative: Number(bdc.backStake) || 0, moeda: bdc.backMoeda, freebet: !!bdc.freebet, lucro: bdcCalc.lucroSeBackGanha, stakeBRL: bdcCalc.backStakeBRLReal, payoutBRL: bdcCalc.payoutBack, cashbackBRL: bdcCalc.cashbackBackValor },
+                  { label: "Dupla Chance ganhou", odd: bdcCalc.dcOddMedia || null, stakeNative: bdcCalc.dcStakeBRL / fator(bdc.dcMoeda), moeda: bdc.dcMoeda, lucro: bdcCalc.lucroSeDCGanha, stakeBRL: bdcCalc.dcStakeBRL, payoutBRL: bdcCalc.payoutDC, cashbackBRL: bdcCalc.cashbackDCValor },
                 ])}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
               >
@@ -1143,8 +1143,8 @@ export default function Calculadora() {
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
               <button
                 onClick={() => lancarOperacao("Back x Lay", "backlay", blCalc.apostaTotal, [
-                  { label: "Saiu (back ganhou)", lucro: blCalc.lucroSeSair },
-                  { label: "Não saiu (lay ganhou)", lucro: blCalc.lucroSeNaoSair },
+                  { label: "Saiu (back ganhou)", odd: Number(bl.backOdd) || null, stakeNative: Number(bl.backStake) || 0, moeda: bl.backMoeda, freebet: !!bl.freebet, stakeBRL: Number(bl.backStake || 0) * fator(bl.backMoeda), lucro: blCalc.lucroSeSair },
+                  { label: "Não saiu (lay ganhou)", odd: blCalc.layOddMedia || null, stakeNative: blCalc.layStakeBRL / fator(bl.layMoeda), moeda: bl.layMoeda, stakeBRL: blCalc.layStakeBRL, lucro: blCalc.lucroSeNaoSair },
                 ])}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fbbf24", color: "#0b0d10", border: "none" }}
               >
@@ -1405,6 +1405,7 @@ export default function Calculadora() {
                 label: l.nome || "Casa",
                 lucro: l.lucro,
                 selecao: casas[i]?.selecao || null,
+                odd: l.oddMedia, stakeNative: l.stakeNative, moeda: l.moeda, freebet: !!l.freebet,
                 stakeBRL: l.dinheiroRealBRL,
                 payoutBRL: l.payoutBRL,
                 cashbackBRL: l.cashbackOwnBRL,

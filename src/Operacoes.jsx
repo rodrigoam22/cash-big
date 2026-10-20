@@ -69,7 +69,9 @@ export default function Operacoes() {
     return ls.length ? Math.min(...ls) : Number(o.lucro || 0);
   };
   const mediaPerda = useMemo(() => {
-    const base = escopoMedia === "mes" ? todasFin.filter((o) => o.data >= inicioMes && o.data <= fimMes) : todasFin;
+    const dataDia = diaSel ? `${ano}-${pad2(mes + 1)}-${diaSel}` : null;
+    const base = escopoMedia === "dia" && dataDia ? todasFin.filter((o) => o.data === dataDia)
+      : escopoMedia === "mes" ? todasFin.filter((o) => o.data >= inicioMes && o.data <= fimMes) : todasFin;
     const contadas = base.filter((o) => !o.fora_media && (incluirManual || (o.tipo && o.tipo !== "manual")));
     const lucro = contadas.reduce((a, o) => a + piorCenario(o), 0);
     const apostado = contadas.reduce((a, o) => a + Number(o.apostado || 0), 0);
@@ -80,7 +82,7 @@ export default function Operacoes() {
       porTipo[t].n += 1; porTipo[t].lucro += piorCenario(o); porTipo[t].apostado += Number(o.apostado || 0);
     });
     return { n: contadas.length, fora: base.length - contadas.length, lucro, apostado, pct: apostado ? (lucro / apostado) * 100 : 0, porJogo: contadas.length ? lucro / contadas.length : 0, porTipo };
-  }, [todasFin, escopoMedia, inicioMes, fimMes, incluirManual]);
+  }, [todasFin, escopoMedia, inicioMes, fimMes, incluirManual, diaSel, ano, mes]);
   const NOME_TIPO = { multiplas: "Múltiplas", backlay: "Back x Lay", backdc: "Back + DC", dg2up: "Duplo Green", manual: "Manual" };
 
   const resumo = useMemo(() => {
@@ -708,7 +710,7 @@ export default function Operacoes() {
             <input type="checkbox" checked={incluirManual} onChange={(e) => setIncluirManual(e.target.checked)} /> incluir manuais
           </label>
           <div style={{ display: "flex", gap: 2, background: "#0b0e1d", border: "1px solid #2a2f52", borderRadius: 6, padding: 2 }}>
-            {[["total", "Total"], ["mes", "Mês"]].map(([v, l]) => (
+            {[["total", "Total"], ["mes", "Mês"], ...(diaSel ? [["dia", `Dia ${diaSel}`]] : [])].map(([v, l]) => (
               <button key={v} onClick={() => setEscopoMedia(v)} style={{ padding: "3px 9px", borderRadius: 4, fontSize: 10.5, fontWeight: 600, border: "none", background: escopoMedia === v ? "#00e676" : "transparent", color: escopoMedia === v ? "#0b0e1d" : "#8b90b3" }}>{l}</button>
             ))}
           </div>
@@ -762,7 +764,7 @@ export default function Operacoes() {
             const selecionado = diaSel === diaStr;
             const hj = new Date(); const ehHoje = hj.getFullYear() === ano && hj.getMonth() === mes && hj.getDate() === diaNum;
             return (
-              <div key={diaNum} onClick={() => setDiaSel(selecionado ? null : diaStr)} style={{ cursor: "pointer", outline: selecionado ? "2px solid #00e676" : "none", borderRadius: 8, padding: "8px 4px", minHeight: 58, textAlign: "center", background: temDados ? (positivo ? "rgba(16,185,129,.08)" : "rgba(244,63,94,.08)") : "rgba(255,255,255,.015)", border: ehHoje ? "2px solid #3b82f6" : `1px solid ${temDados ? (positivo ? "rgba(16,185,129,.2)" : "rgba(244,63,94,.2)") : "#23274a"}` }}>
+              <div key={diaNum} onClick={() => { setDiaSel(selecionado ? null : diaStr); setEscopoMedia(selecionado ? (escopoMedia === "dia" ? "mes" : escopoMedia) : "dia"); }} style={{ cursor: "pointer", outline: selecionado ? "2px solid #00e676" : "none", borderRadius: 8, padding: "8px 4px", minHeight: 58, textAlign: "center", background: temDados ? (positivo ? "rgba(16,185,129,.08)" : "rgba(244,63,94,.08)") : "rgba(255,255,255,.015)", border: ehHoje ? "2px solid #3b82f6" : `1px solid ${temDados ? (positivo ? "rgba(16,185,129,.2)" : "rgba(244,63,94,.2)") : "#23274a"}` }}>
                 <div style={{ fontSize: 11, color: temDados ? "#e4e4e7" : "#6b7099", fontWeight: 600 }}>{diaNum}</div>
                 {temDados && (
                   <>

@@ -21,7 +21,7 @@ export default function Operacoes() {
   const [escopoMedia, setEscopoMedia] = useState("total"); // "mes" | "total"
   const [loading, setLoading] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
-  const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL" }); // modo: "finalizada" | "pendente"
+  const [novo, setNovo] = useState({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL", bonus: false }); // modo: "finalizada" | "pendente"
   const [resolvendoId, setResolvendoId] = useState(null);
   const [lucroManual, setLucroManual] = useState("");
   const [lucroManualMoeda, setLucroManualMoeda] = useState("BRL");
@@ -137,10 +137,11 @@ export default function Operacoes() {
           apostado: stake,
           lucro: (novo.lucro === "" ? 0 : Number(novo.lucro)) * fator,
           status: "finalizado",
+          fora_media: !!novo.bonus,
         };
     const { error } = await supabase.from("operacoes").insert(payload);
     if (!error) {
-      setNovo({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL" });
+      setNovo({ data: hoje.toISOString().slice(0, 10), descricao: "", apostado: "", lucro: "", odd: "", modo: "finalizada", moeda: "BRL", bonus: false });
       setMostrarForm(false);
       carregar();
     }
@@ -564,6 +565,9 @@ export default function Operacoes() {
             )}
           </div>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 11px", borderRadius: 6, background: "rgba(0,0,0,.25)", color: "#fff" }}>{pendente ? "Pendente" : "Finalizado"}</span>
+          <button onClick={stop(() => alternarForaMedia(o))} title={o.fora_media ? "Fora da média: clique para voltar a contar" : "Conta na média: clique para tirar (bônus, cashback, prêmio)"} style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 9px", borderRadius: 6, border: o.fora_media ? "1px solid #f59e0b" : "1px solid rgba(255,255,255,.35)", background: o.fora_media ? "rgba(245,158,11,.25)" : "rgba(0,0,0,.2)", color: o.fora_media ? "#fbbf24" : "rgba(255,255,255,.85)" }}>
+            {o.fora_media ? "fora da média" : "na média"}
+          </button>
           <button onClick={stop(() => excluir(o.id))} title="Excluir" style={{ background: "none", border: "none", color: "rgba(255,255,255,.7)", padding: 0 }}><Trash2 size={14} /></button>
           {aberto ? <ChevronUp size={16} color="#fff" /> : <ChevronDown size={16} color="#fff" />}
         </div>
@@ -602,7 +606,7 @@ export default function Operacoes() {
                     {o.cobertura_odd != null ? "editar cobertura" : "+ cobertura"}
                   </button>
                   <button onClick={() => alternarForaMedia(o)} title="Marcar bônus ou lucro por duplo/handicap pra não entrar na perda média" style={{ ...btn, color: o.fora_media ? "#7dffb3" : "#fff" }}>
-                    {o.fora_media ? "fora da média" : "conta na média"}
+                    {o.fora_media ? "voltar a contar na média" : "tirar da média"}
                   </button>
                 </>
               )}
@@ -670,6 +674,12 @@ export default function Operacoes() {
               <Campo label={`Lucro (${novo.moeda === "USD" ? "US$" : "R$"})`}><input type="number" step="0.01" value={novo.lucro} onChange={(e) => setNovo({ ...novo, lucro: e.target.value })} placeholder="0,00" className="input-field" /></Campo>
             )}
           </div>
+          {novo.modo === "finalizada" && (
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#f59e0b", marginBottom: 10, cursor: "pointer" }}>
+              <input type="checkbox" checked={!!novo.bonus} onChange={(e) => setNovo({ ...novo, bonus: e.target.checked })} />
+              Bônus / cashback / premiação — não entra na média de %
+            </label>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={adicionar} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "#00e676", color: "#0b0e1d", border: "none" }}>Salvar</button>
             <button onClick={() => setMostrarForm(false)} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 12.5, fontWeight: 500, background: "none", color: "#8b90b3", border: "1px solid #2a2f52" }}>Cancelar</button>
@@ -705,7 +715,7 @@ export default function Operacoes() {
       {/* média de perda (só operações que contam) */}
       <div style={{ borderRadius: 10, border: "1px solid #2a2f52", background: "rgba(26,30,58,.9)", padding: 16, marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#8b90b3" }}>Perda média por operação <span style={{ color: "#6b7099" }}>(pior cenário previsto, sem duplo/handicap/cobertura · sem as marcadas "fora da média")</span></div>
+          <div style={{ fontSize: 11, color: "#8b90b3" }}>Perda média por operação <span style={{ color: "#6b7099" }}>(pior cenário previsto, sem duplo/handicap/cobertura · sem as marcadas "fora da média" — o botão fica em cada operação)</span></div>
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "#8b90b3", cursor: "pointer" }}>
             <input type="checkbox" checked={incluirManual} onChange={(e) => setIncluirManual(e.target.checked)} /> incluir manuais
           </label>

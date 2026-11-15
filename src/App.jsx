@@ -3,7 +3,7 @@ import { supabase } from "./supabase";
 import Calculadora from "./Calculadora";
 import Operacoes from "./Operacoes";
 import Pagamento from "./Pagamento";
-import Surebet from "./surebet/Surebet";
+import Surebet from "./Surebet";
 import { LogOut, DollarSign, Calculator as CalcIcon, ClipboardList, Wallet, Shuffle } from "lucide-react";
 
 // ================= LOGIN =================

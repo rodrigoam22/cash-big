@@ -24,3 +24,4 @@ button { cursor: pointer; }
   border-color: rgba(0, 230, 118, 0.5);
 }
 .input-field::placeholder { color: #6b7099; }
+select.input-field { appearance: auto; }

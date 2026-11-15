@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { listar } from "./db";
-import { buscarCotacao, lerCache } from "../cotacao";
+import { buscarCotacao, lerCache } from "./cotacao";
 import NovaSurebet from "./NovaSurebet";
 import Registro from "./Registro";
 import Cadastros from "./Cadastros";

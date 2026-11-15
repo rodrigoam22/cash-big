@@ -3,7 +3,8 @@ import { supabase } from "./supabase";
 import Calculadora from "./Calculadora";
 import Operacoes from "./Operacoes";
 import Pagamento from "./Pagamento";
-import { LogOut, DollarSign, Calculator as CalcIcon, ClipboardList, Wallet } from "lucide-react";
+import Surebet from "./surebet/Surebet";
+import { LogOut, DollarSign, Calculator as CalcIcon, ClipboardList, Wallet, Shuffle } from "lucide-react";
 
 // ================= LOGIN =================
 function Login() {
@@ -83,6 +84,7 @@ function Dashboard() {
               { id: "calculadora", label: "Calculadora", Icon: CalcIcon, grad: "linear-gradient(135deg,#2f80c9,#1d5c99)" },
               { id: "operacoes", label: "Operações", Icon: ClipboardList, grad: "linear-gradient(135deg,#00d26a,#00a050)" },
               { id: "pagamento", label: "Pagamento", Icon: Wallet, grad: "linear-gradient(135deg,#8e5bd6,#6a3fb0)" },
+              { id: "surebet", label: "Surebet", Icon: Shuffle, grad: "linear-gradient(135deg,#f08a24,#c96512)" },
             ].map(({ id, label, Icon, grad }) => {
               const ativo = pagina === id;
               return (
@@ -105,7 +107,7 @@ function Dashboard() {
       </header>
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 20px" }}>
-        {pagina === "operacoes" ? <Operacoes /> : pagina === "pagamento" ? <Pagamento /> : <Calculadora />}
+        {pagina === "operacoes" ? <Operacoes /> : pagina === "pagamento" ? <Pagamento /> : pagina === "surebet" ? <Surebet /> : <Calculadora />}
       </div>
     </div>
   );

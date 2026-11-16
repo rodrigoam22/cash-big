@@ -292,7 +292,19 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
       )}
       {pendentes.length > 0 && (
         <>
-          <div style={{ fontSize: 12, color: "#f59e0b", fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Pendentes ({pendentes.length})</div>
+          {(() => {
+            const somaApostado = pendentes.reduce((a, s) => a + emVis(s.apostado_brl, s), 0);
+            const somaPrevisto = pendentes.reduce((a, s) => { const c = cenariosBRL(s); return a + (c.length ? emVis(Math.min(...c), s) : 0); }, 0);
+            return (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8, padding: "8px 14px", borderRadius: 10, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.3)" }}>
+                <div style={{ fontSize: 12, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Pendentes ({pendentes.length})</div>
+                <div className="mono" style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
+                  <span style={{ color: "#b4b9d6" }}>em aberto <b style={{ color: "#fff" }}>{fmt(somaApostado)}</b></span>
+                  <span style={{ color: "#b4b9d6" }}>previsto <b style={{ color: somaPrevisto >= 0 ? "#00e676" : "#ff5a6a", fontSize: 13.5 }}>{sinal(somaPrevisto)}{fmt(somaPrevisto)}</b></span>
+                </div>
+              </div>
+            );
+          })()}
           {pendentes.map((s, i) => linha(s, pendentes.length - i))}
         </>
       )}

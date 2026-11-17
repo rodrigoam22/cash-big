@@ -127,12 +127,13 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
             <div className="mono" style={{ fontSize: 10.5, color: "rgba(255,255,255,.7)" }}>Apostado {fmt(apostado)}</div>
             {fin ? (
               <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: lucro >= 0 ? "#7dffb3" : "#ff8a95" }}>
-                {sinal(lucro)}{fmt(lucro)} <span style={{ fontWeight: 600, fontSize: 11 }}>· ROI {apostado ? ((lucro / apostado) * 100).toFixed(2) : "0.00"}%</span>
+                {sinal(lucro)}{fmt(lucro)}
               </div>
             ) : (
               <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: "#ffe1a8" }}>previsto {sinal(minPrev)}{fmt(minPrev)}</div>
             )}
           </div>
+          <BadgePct valor={fin ? lucro : minPrev} base={apostado} />
           <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 11px", borderRadius: 6, background: "rgba(0,0,0,.25)", color: "#fff" }}>{fin ? "Finalizada" : "Pendente"}</span>
           <button onClick={stop(() => apagar(sb))} title="Excluir" style={{ background: "none", border: "none", color: "rgba(255,255,255,.7)", padding: 0 }}><Trash2 size={14} /></button>
           {aberto ? <ChevronUp size={16} color="#fff" /> : <ChevronDown size={16} color="#fff" />}
@@ -301,6 +302,7 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
                 <div className="mono" style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
                   <span style={{ color: "#b4b9d6" }}>em aberto <b style={{ color: "#fff" }}>{fmt(somaApostado)}</b></span>
                   <span style={{ color: "#b4b9d6" }}>previsto <b style={{ color: somaPrevisto >= 0 ? "#00e676" : "#ff5a6a", fontSize: 13.5 }}>{sinal(somaPrevisto)}{fmt(somaPrevisto)}</b></span>
+                  <BadgePct valor={somaPrevisto} base={somaApostado} />
                 </div>
               </div>
             );
@@ -308,7 +310,22 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
           {pendentes.map((s, i) => linha(s, pendentes.length - i))}
         </>
       )}
-      <div style={{ fontSize: 12, color: "#8b90b3", fontWeight: 700, margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>Finalizadas ({finalizadas.length})</div>
+      {(() => {
+        const somaApostado = finalizadas.reduce((a, s) => a + emVis(s.apostado_brl, s), 0);
+        const somaLucro = finalizadas.reduce((a, s) => a + emVis(s.lucro_brl, s), 0);
+        return (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, margin: "16px 0 8px", padding: "8px 14px", borderRadius: 10, background: "rgba(56,189,248,.06)", border: "1px solid rgba(56,189,248,.25)" }}>
+            <div style={{ fontSize: 12, color: "#8b90b3", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Finalizadas ({finalizadas.length})</div>
+            {finalizadas.length > 0 && (
+              <div className="mono" style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
+                <span style={{ color: "#b4b9d6" }}>apostado <b style={{ color: "#fff" }}>{fmt(somaApostado)}</b></span>
+                <span style={{ color: "#b4b9d6" }}>lucro <b style={{ color: somaLucro >= 0 ? "#00e676" : "#ff5a6a", fontSize: 13.5 }}>{sinal(somaLucro)}{fmt(somaLucro)}</b></span>
+                <BadgePct valor={somaLucro} base={somaApostado} />
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {finalizadas.length === 0 ? (
         <div style={{ fontSize: 12.5, color: "#6b7099", padding: "10px 0" }}>Nenhuma surebet finalizada {diaSel ? "neste dia" : "neste mês"}{fParc || fCasa ? " com esse filtro" : ""}.</div>
       ) : (
@@ -317,6 +334,17 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
 
       {resolvendo && <Resolver sb={resolvendo} vis={vis} onClose={() => setResolvendo(null)} onSalvo={async () => { setResolvendo(null); await recarregar(); }} />}
     </div>
+  );
+}
+
+// % em destaque (lucro ÷ apostado)
+function BadgePct({ valor, base }) {
+  const pct = base ? (valor / base) * 100 : 0;
+  const pos = pct >= 0;
+  return (
+    <span className="mono" style={{ fontSize: 14, fontWeight: 800, padding: "4px 10px", borderRadius: 7, minWidth: 72, textAlign: "center", background: pos ? "rgba(0,230,118,.18)" : "rgba(255,90,106,.2)", color: pos ? "#7dffb3" : "#ff8a95", border: `1px solid ${pos ? "rgba(0,230,118,.5)" : "rgba(255,90,106,.55)"}` }}>
+      {pos ? "+" : ""}{pct.toFixed(2)}%
+    </span>
   );
 }
 

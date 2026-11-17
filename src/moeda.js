@@ -31,6 +31,7 @@ export const RESULTADOS = [
   { v: "anulada", label: "Anulada", cor: "#5ea8ff" },
   { v: "meio_perdeu", label: "½ Perdeu", cor: "#f59e0b" },
   { v: "perdeu", label: "Perdeu", cor: "#ff5a6a" },
+  { v: "cashout", label: "Cashout", cor: "#22d3ee" },
 ];
 
 // retorno (na moeda da perna) de uma perna conforme o resultado
@@ -42,6 +43,7 @@ export function retornoPerna(p) {
     case "anulada": return s;
     case "meio_perdeu": return s / 2;
     case "perdeu": return 0;
+    case "cashout": return n(p.cashout); // valor recebido no cashout (moeda da perna)
     default: return null; // pendente
   }
 }

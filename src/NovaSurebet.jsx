@@ -138,6 +138,7 @@ export default function NovaSurebet({ casas, parcerias, contas, taxa: taxaAtual,
         stake: Math.round(calc.stakes[i] * 100) / 100,
         moeda: p.moeda,
         resultado: editando?.status === "finalizado" ? p.resultado || null : null,
+        cashout: editando?.status === "finalizado" && p.resultado === "cashout" ? n(p.cashout) : null,
       };
     });
     const finalizada = editando?.status === "finalizado" && pernas.every((p) => p.resultado);

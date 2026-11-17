@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { atualizar, excluir } from "./db";
-import { n, paraBRL, deBRL, fmtMoeda, sinal, RESULTADOS, retornoPerna, plPernaBRL } from "./moeda";
+import { n, paraBRL, deBRL, fmtMoeda, sinal, RESULTADOS, retornoPerna, plPernaBRL, SIMB } from "./moeda";
 import { C, Metrica, Modal, Seletor, CORES_PERNA, Chip, confirmar } from "./ui";
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trash2, Pencil, TrendingUp, Activity } from "lucide-react";
 
@@ -148,7 +148,7 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
                   <div key={i} style={{ padding: 12, borderRadius: 10, background: "#12152b", border: `1px solid ${r ? r.cor + "88" : "#23274a"}`, borderTop: `3px solid ${CORES_PERNA[i]}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <span style={{ fontSize: 10, color: "#8b90b3", fontWeight: 700 }}>PERNA {i + 1}</span>
-                      {r && <Chip cor={r.cor}>{r.label}</Chip>}
+                      {r && <Chip cor={r.cor}>{r.label}{p.resultado === "cashout" ? ` ${fmtMoeda(p.cashout, p.moeda)}` : ""}</Chip>}
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#fafafa" }}>{p.casa_nome || "Sem conta"}</div>
                     <div style={{ fontSize: 11, color: "#b4b9d6", marginBottom: 6 }}>{p.parceria_nome || "—"}</div>
@@ -323,10 +323,11 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
 // ================= DEFINIR RESULTADO =================
 function Resolver({ sb, vis, onClose, onSalvo }) {
   const [res, setRes] = useState(() => (sb.pernas || []).map((p) => p.resultado || null));
+  const [cash, setCash] = useState(() => (sb.pernas || []).map((p) => (p.resultado === "cashout" && p.cashout != null ? String(p.cashout) : "")));
   const [salvando, setSalvando] = useState(false);
   const t = sb.taxa;
-  const pernas = (sb.pernas || []).map((p, i) => ({ ...p, resultado: res[i] }));
-  const completo = res.every(Boolean);
+  const pernas = (sb.pernas || []).map((p, i) => ({ ...p, resultado: res[i], cashout: res[i] === "cashout" ? (cash[i] === "" ? null : n(cash[i])) : null }));
+  const completo = res.every(Boolean) && pernas.every((p) => p.resultado !== "cashout" || p.cashout != null);
   const apostadoBRL = pernas.reduce((a, p) => a + paraBRL(p.stake, p.moeda, t), 0);
   const lucroBRL = pernas.reduce((a, p) => a + plPernaBRL(p, t), 0);
   const fmt = (vBRL) => fmtMoeda(deBRL(vBRL, vis, t), vis);
@@ -346,7 +347,7 @@ function Resolver({ sb, vis, onClose, onSalvo }) {
   const voltarPendente = async () => {
     setSalvando(true);
     try {
-      await atualizar("surebets", sb.id, { pernas: pernas.map((p) => ({ ...p, resultado: null })), status: "pendente", lucro_brl: 0 });
+      await atualizar("surebets", sb.id, { pernas: pernas.map((p) => ({ ...p, resultado: null, cashout: null })), status: "pendente", lucro_brl: 0 });
       await onSalvo();
     } catch (e) { alert("Erro: " + e.message); setSalvando(false); }
   };
@@ -378,9 +379,17 @@ function Resolver({ sb, vis, onClose, onSalvo }) {
                   </button>
                 );
               })}
+              {res[i] === "cashout" && (
+                <div style={{ padding: 10, borderRadius: 8, background: "rgba(34,211,238,.08)", border: "1px solid rgba(34,211,238,.45)" }}>
+                  <div style={{ fontSize: 10.5, color: "#67e8f9", marginBottom: 4, fontWeight: 600 }}>Valor recebido no cashout ({SIMB[p.moeda] || p.moeda})</div>
+                  <input autoFocus type="number" step="0.01" value={cash[i]} onChange={(e) => { const v = e.target.value; setCash((prev) => prev.map((x, k) => (k === i ? v : x))); }} placeholder="0,00" className="input-field" />
+                  <div style={{ fontSize: 10, color: "#6b7099", marginTop: 4 }}>o que a casa devolveu no total (stake {fmtMoeda(p.stake, p.moeda)})</div>
+                </div>
+              )}
               <div style={{ textAlign: "center", padding: "8px", borderRadius: 8, background: "#12152b" }}>
                 <div style={{ fontSize: 10.5, color: "#8b90b3" }}>Retorno</div>
                 <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: r > 0 ? "#00e676" : "#8b90b3" }}>{r === null ? "—" : fmtMoeda(r, p.moeda)}</div>
+                {r !== null && <div className="mono" style={{ fontSize: 10.5, color: r - n(p.stake) >= 0 ? "#00e676" : "#ff5a6a" }}>{sinal(r - n(p.stake))}{fmtMoeda(r - n(p.stake), p.moeda)} na perna</div>}
               </div>
             </div>
           );

@@ -34,9 +34,12 @@ export const RESULTADOS = [
   { v: "cashout", label: "Cashout", cor: "#22d3ee" },
 ];
 
+// odd líquida: desconta a comissão da exchange sobre o lucro
+export const oddEfetiva = (p) => 1 + (n(p.odd) - 1) * (1 - n(p.comissao) / 100);
+
 // retorno (na moeda da perna) de uma perna conforme o resultado
 export function retornoPerna(p) {
-  const s = n(p.stake), o = n(p.odd);
+  const s = n(p.stake), o = oddEfetiva(p);
   switch (p.resultado) {
     case "ganhou": return s * o;
     case "meio_ganhou": return (s / 2) * o + s / 2;

@@ -128,14 +128,16 @@ export default function Cadastros({ casas, parcerias, contas, surebets, taxa, vi
 function SecaoCasas({ casas, contas, tentar }) {
   const [nome, setNome] = useState("");
   const [moeda, setMoeda] = useState("USD");
+  const [comissao, setComissao] = useState("");
   const [editId, setEditId] = useState(null);
-  const [edit, setEdit] = useState({ nome: "", moeda: "USD" });
+  const [edit, setEdit] = useState({ nome: "", moeda: "USD", comissao: "" });
 
   const adicionar = () => {
     if (!nome.trim()) return;
     if (casas.some((c) => c.nome.toLowerCase() === nome.trim().toLowerCase())) { alert("Essa casa já está cadastrada."); return; }
-    tentar(() => inserir("casas", { nome: nome.trim(), moeda }));
+    tentar(() => inserir("casas", { nome: nome.trim(), moeda, ...(n(comissao) > 0 ? { comissao: n(comissao) } : {}) }));
     setNome("");
+    setComissao("");
   };
 
   return (
@@ -147,6 +149,7 @@ function SecaoCasas({ casas, contas, tentar }) {
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
         <input value={nome} onChange={(e) => setNome(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionar()} placeholder="nome da casa (ex: Pinnacle)" className="input-field" style={{ flex: 1, minWidth: 140 }} />
+        <input type="number" step="0.1" value={comissao} onChange={(e) => setComissao(e.target.value)} placeholder="% com." title="Comissão sobre o lucro (exchanges). Deixe vazio se não tiver." className="input-field" style={{ width: 74 }} />
         <SeletorMoeda value={moeda} onChange={setMoeda} />
         <button onClick={adicionar} style={{ ...C.btnVerde, padding: "7px 12px", display: "flex", alignItems: "center", gap: 4 }}><Plus size={13} /> add</button>
       </div>
@@ -157,15 +160,16 @@ function SecaoCasas({ casas, contas, tentar }) {
           return editId === c.id ? (
             <div key={c.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: 6, borderRadius: 8, background: "#12152b" }}>
               <input autoFocus value={edit.nome} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} className="input-field" style={{ flex: 1, padding: "5px 8px" }} />
+              <input type="number" step="0.1" value={edit.comissao} onChange={(e) => setEdit({ ...edit, comissao: e.target.value })} placeholder="% com." className="input-field" style={{ width: 66, padding: "5px 8px" }} />
               <SeletorMoeda small value={edit.moeda} onChange={(m) => setEdit({ ...edit, moeda: m })} />
-              <button onClick={() => { tentar(() => atualizar("casas", c.id, { nome: edit.nome.trim() || c.nome, moeda: edit.moeda })); setEditId(null); }} style={{ background: "none", border: "none", color: "#00e676", padding: 2 }}><Check size={15} /></button>
+              <button onClick={() => { tentar(() => atualizar("casas", c.id, { nome: edit.nome.trim() || c.nome, moeda: edit.moeda, ...(n(edit.comissao) > 0 || c.comissao ? { comissao: n(edit.comissao) > 0 ? n(edit.comissao) : null } : {}) })); setEditId(null); }} style={{ background: "none", border: "none", color: "#00e676", padding: 2 }}><Check size={15} /></button>
               <button onClick={() => setEditId(null)} style={{ background: "none", border: "none", color: "#8b90b3", padding: 2 }}><X size={15} /></button>
             </div>
           ) : (
             <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 10px", borderRadius: 8, background: "#12152b", border: "1px solid #23274a" }}>
               <span style={{ flex: 1, fontSize: 13, color: "#e4e4e7", fontWeight: 600 }}>{c.nome}</span>
-              <span className="mono" style={{ fontSize: 10.5, color: "#8b90b3" }}>{SIMB[c.moeda] || c.moeda} · {qtd} conta{qtd === 1 ? "" : "s"}</span>
-              <button onClick={() => { setEditId(c.id); setEdit({ nome: c.nome, moeda: c.moeda || "USD" }); }} style={{ background: "none", border: "none", color: "#8b90b3", padding: 2 }}><Pencil size={13} /></button>
+              <span className="mono" style={{ fontSize: 10.5, color: "#8b90b3" }}>{SIMB[c.moeda] || c.moeda}{c.comissao ? ` · ${Number(c.comissao)}% com.` : ""} · {qtd} conta{qtd === 1 ? "" : "s"}</span>
+              <button onClick={() => { setEditId(c.id); setEdit({ nome: c.nome, moeda: c.moeda || "USD", comissao: c.comissao ? String(c.comissao) : "" }); }} style={{ background: "none", border: "none", color: "#8b90b3", padding: 2 }}><Pencil size={13} /></button>
               <button onClick={() => confirmar(`Excluir a casa ${c.nome}? As ${qtd} conta(s) ligadas a ela também serão removidas (o histórico de surebets continua).`) && tentar(() => excluir("casas", c.id))} style={{ background: "none", border: "none", color: "#8b90b3", padding: 2 }}><Trash2 size={13} /></button>
             </div>
           );

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { atualizar, excluir } from "./db";
-import { n, paraBRL, deBRL, fmtMoeda, sinal, RESULTADOS, retornoPerna, plPernaBRL, SIMB } from "./moeda";
+import { n, paraBRL, deBRL, fmtMoeda, sinal, RESULTADOS, retornoPerna, plPernaBRL, SIMB, oddEfetiva } from "./moeda";
 import { C, Metrica, Modal, Seletor, CORES_PERNA, Chip, confirmar } from "./ui";
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trash2, Pencil, TrendingUp, Activity } from "lucide-react";
 
@@ -13,7 +13,7 @@ function cenariosBRL(sb) {
   const t = sb.taxa;
   const pernas = sb.pernas || [];
   const total = pernas.reduce((a, p) => a + paraBRL(p.stake, p.moeda, t), 0);
-  return pernas.map((p) => paraBRL(n(p.stake) * n(p.odd), p.moeda, t) - total);
+  return pernas.map((p) => paraBRL(n(p.stake) * oddEfetiva(p), p.moeda, t) - total);
 }
 
 export default function Registro({ casas, parcerias, surebets, taxa, vis, recarregar, onEditar }) {
@@ -154,7 +154,7 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#fafafa" }}>{p.casa_nome || "Sem conta"}</div>
                     <div style={{ fontSize: 11, color: "#b4b9d6", marginBottom: 6 }}>{p.parceria_nome || "—"}</div>
                     <div style={{ fontSize: 12, color: "#e4e4e7", marginBottom: 4 }}>{p.selecao || "—"}</div>
-                    <div className="mono" style={{ fontSize: 11, color: "#8b90b3" }}>@{n(p.odd).toFixed(2)} · {fmtMoeda(p.stake, p.moeda)}</div>
+                    <div className="mono" style={{ fontSize: 11, color: "#8b90b3" }}>@{n(p.odd).toFixed(2)}{n(p.comissao) > 0 ? ` (com. ${n(p.comissao)}%)` : ""} · {fmtMoeda(p.stake, p.moeda)}</div>
                     {r ? (
                       <div className="mono" style={{ fontSize: 11.5, marginTop: 6, fontWeight: 700, color: pl >= 0 ? "#00e676" : "#ff5a6a" }}>{sinal(pl)}{fmtMoeda(deBRL(pl, p.moeda, sb.taxa), p.moeda)}</div>
                     ) : (
@@ -397,7 +397,7 @@ function Resolver({ sb, vis, onClose, onSalvo }) {
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#fafafa" }}>{p.casa_nome || "Sem conta"}</div>
                 <div style={{ fontSize: 10.5, color: "#8b90b3", marginBottom: 4 }}>{p.parceria_nome || "—"}</div>
                 <div style={{ fontSize: 12, color: "#e4e4e7" }}>{p.selecao || "—"}</div>
-                <div className="mono" style={{ fontSize: 11, color: "#8b90b3" }}>@{n(p.odd).toFixed(2)} · {fmtMoeda(p.stake, p.moeda)}</div>
+                <div className="mono" style={{ fontSize: 11, color: "#8b90b3" }}>@{n(p.odd).toFixed(2)}{n(p.comissao) > 0 ? ` (com. ${n(p.comissao)}%)` : ""} · {fmtMoeda(p.stake, p.moeda)}</div>
               </div>
               {RESULTADOS.map((o) => {
                 const ativo = res[i] === o.v;

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { inserir, atualizar } from "./db";
-import { n, paraBRL, deBRL, fmtMoeda, fmtVis, sinal, SIMB, hojeLocal, plPernaBRL } from "./moeda";
+import { n, paraBRL, deBRL, fmtMoeda, fmtVis, sinal, SIMB, hojeLocal, plPernaBRL, oddEfetiva } from "./moeda";
 import { C, Campo, Seletor, SeletorMoeda, CORES_PERNA, STATUS_CONTA, Chip } from "./ui";
 import { Pin, RotateCcw, Save, AlertTriangle } from "lucide-react";
 
-const pernaVazia = (moeda = "USD") => ({ conta_id: "", selecao: "", odd: "", stake: "", moeda });
+const pernaVazia = (moeda = "USD") => ({ conta_id: "", selecao: "", odd: "", comissao: "", stake: "", moeda });
 const estadoInicial = () => ({
   data: hojeLocal(),
   evento: "",
@@ -37,7 +37,7 @@ export default function NovaSurebet({ casas, parcerias, contas, taxa: taxaAtual,
       esporte: editando.esporte || "Futebol",
       obs: editando.obs || "",
       vias: editando.vias || (editando.pernas || []).length || 2,
-      pernas: (editando.pernas || []).map((p) => ({ ...p, odd: String(p.odd ?? ""), stake: String(p.stake ?? "") })),
+      pernas: (editando.pernas || []).map((p) => ({ ...p, odd: String(p.odd ?? ""), comissao: p.comissao ? String(p.comissao) : "", stake: String(p.stake ?? "") })),
       modo: "manual",
       total: "",
       totalMoeda: "USD",
@@ -80,13 +80,14 @@ export default function NovaSurebet({ casas, parcerias, contas, taxa: taxaAtual,
   const escolherConta = (i, contaId) => {
     const conta = contaPorId[contaId];
     const casa = conta && casaPorId[conta.casa_id];
-    setPerna(i, { conta_id: contaId, ...(casa?.moeda ? { moeda: casa.moeda } : {}) });
+    setPerna(i, { conta_id: contaId, ...(casa?.moeda ? { moeda: casa.moeda } : {}), ...(casa ? { comissao: casa.comissao ? String(casa.comissao) : "" } : {}) });
   };
 
   // ---------- cálculo ----------
   const calc = useMemo(() => {
-    const odds = f.pernas.map((p) => n(p.odd));
-    const validas = odds.length > 0 && odds.every((o) => o > 1);
+    const oddsBrutas = f.pernas.map((p) => n(p.odd));
+    const odds = f.pernas.map((p) => oddEfetiva(p)); // já sem a comissão
+    const validas = oddsBrutas.length > 0 && oddsBrutas.every((o) => o > 1) && odds.every((o) => o > 1);
     const somaInv = validas ? odds.reduce((a, o) => a + 1 / o, 0) : 0;
     const margem = validas ? (1 / somaInv - 1) * 100 : null;
 
@@ -109,7 +110,7 @@ export default function NovaSurebet({ casas, parcerias, contas, taxa: taxaAtual,
       lucroBRL: paraBRL(stakes[i] * odds[i], p.moeda, taxa) - totalBRL,
     }));
     const lucros = cenarios.map((c) => c.lucroBRL);
-    const temStake = totalBRL > 0 && odds.every((o) => o > 1);
+    const temStake = totalBRL > 0 && validas;
     return {
       odds, validas, margem, stakes, stakesBRL, totalBRL, cenarios, temStake,
       min: temStake ? Math.min(...lucros) : 0,
@@ -134,7 +135,8 @@ export default function NovaSurebet({ casas, parcerias, contas, taxa: taxaAtual,
         casa_nome: casa?.nome || p.casa_nome || "",
         parceria_nome: parc?.nome || p.parceria_nome || "",
         selecao: p.selecao.trim(),
-        odd: calc.odds[i],
+        odd: n(p.odd),
+        comissao: n(p.comissao),
         stake: Math.round(calc.stakes[i] * 100) / 100,
         moeda: p.moeda,
         resultado: editando?.status === "finalizado" ? p.resultado || null : null,
@@ -275,8 +277,9 @@ export default function NovaSurebet({ casas, parcerias, contas, taxa: taxaAtual,
                 <input value={p.selecao} onChange={(e) => setPerna(i, { selecao: e.target.value })} placeholder={i === 0 ? "ex: Over 2.5" : i === 1 ? "ex: Under 2.5" : "ex: Empate"} className="input-field" />
               </Campo>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 8, marginBottom: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 0.8fr 1.3fr", gap: 8, marginBottom: 10 }}>
                 <Campo label="Odd"><input type="number" step="0.01" value={p.odd} onChange={(e) => setPerna(i, { odd: e.target.value })} placeholder="2.05" className="input-field" /></Campo>
+                <Campo label="Comissão %"><input type="number" step="0.1" value={p.comissao ?? ""} onChange={(e) => setPerna(i, { comissao: e.target.value })} placeholder="0" className="input-field" title="Comissão da exchange sobre o lucro" /></Campo>
                 <Campo label={`Stake (${SIMB[p.moeda]})`}>
                   <input
                     type="number" step="0.01"
@@ -290,7 +293,10 @@ export default function NovaSurebet({ casas, parcerias, contas, taxa: taxaAtual,
                 </Campo>
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <SeletorMoeda small value={p.moeda} onChange={(m) => setPerna(i, { moeda: m })} />
+                <div>
+                  <SeletorMoeda small value={p.moeda} onChange={(m) => setPerna(i, { moeda: m })} />
+                  {n(p.comissao) > 0 && n(p.odd) > 1 && <div className="mono" style={{ fontSize: 10, color: "#f59e0b", marginTop: 4 }}>odd líquida {oddEfetiva(p).toFixed(3)}</div>}
+                </div>
                 {calc.temStake && (
                   <div className="mono" style={{ textAlign: "right", fontSize: 11 }}>
                     <div style={{ color: "#8b90b3" }}>retorno {fmtMoeda(cen.retorno, p.moeda)}</div>

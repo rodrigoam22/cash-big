@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { atualizar, excluir } from "./db";
 import { n, paraBRL, deBRL, fmtMoeda, sinal, RESULTADOS, retornoPerna, plPernaBRL, SIMB, oddEfetiva } from "./moeda";
 import { C, Metrica, Modal, Seletor, CORES_PERNA, Chip, confirmar } from "./ui";
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trash2, Pencil, TrendingUp, Activity } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trash2, Pencil, TrendingUp, Activity, Eye, EyeOff } from "lucide-react";
 
 const pad2 = (x) => String(x).padStart(2, "0");
 const mesNome = (ano, mes) => new Date(ano, mes, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -27,6 +27,9 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
   const [resolvendo, setResolvendo] = useState(null);
   const [agrup, setAgrup] = useState("casa"); // "casa" | "parceria"
   const [escopo, setEscopo] = useState("mes"); // "mes" | "total"
+  // mostrar/ocultar o quadro de desempenho (lembra a escolha neste navegador)
+  const [verDesemp, setVerDesemp] = useState(() => { try { return localStorage.getItem("sb_ver_desempenho") !== "0"; } catch { return true; } });
+  const alternarDesemp = () => setVerDesemp((v) => { try { localStorage.setItem("sb_ver_desempenho", v ? "0" : "1"); } catch {} return !v; });
 
   // valor em R$ gravado → moeda de visualização, usando a cotação da própria surebet
   const emVis = (vBRL, sb) => deBRL(vBRL, vis, sb?.taxa?.usd ? sb.taxa : taxa);
@@ -247,14 +250,21 @@ export default function Registro({ casas, parcerias, surebets, taxa, vis, recarr
       </div>
 
       {/* desempenho por casa / parceria */}
-      <div style={{ ...C.card, marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#8b90b3", display: "flex", alignItems: "center", gap: 5 }}><Activity size={12} /> Desempenho por</div>
-          <Seletor small opcoes={[["casa", "Casa"], ["parceria", "Parceria"]]} value={agrup} onChange={setAgrup} />
-          <Seletor small opcoes={[["mes", "Mês"], ["total", "Total"]]} value={escopo} onChange={setEscopo} />
-          <span style={{ fontSize: 10.5, color: "#6b7099" }}>P/L = quanto cada conta ganhou ou perdeu nas pernas (onde o dinheiro ficou)</span>
+      <div style={{ ...C.card, marginBottom: 18, ...(verDesemp ? {} : { padding: "10px 16px" }) }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: verDesemp ? 10 : 0 }}>
+          <div style={{ fontSize: 11, color: "#8b90b3", display: "flex", alignItems: "center", gap: 5 }}><Activity size={12} /> Desempenho por{verDesemp ? "" : " casa / parceria"}</div>
+          {verDesemp && (
+            <>
+              <Seletor small opcoes={[["casa", "Casa"], ["parceria", "Parceria"]]} value={agrup} onChange={setAgrup} />
+              <Seletor small opcoes={[["mes", "Mês"], ["total", "Total"]]} value={escopo} onChange={setEscopo} />
+              <span style={{ fontSize: 10.5, color: "#6b7099" }}>P/L = quanto cada conta ganhou ou perdeu nas pernas (onde o dinheiro ficou)</span>
+            </>
+          )}
+          <button onClick={alternarDesemp} style={{ ...C.btnCinza, marginLeft: "auto", padding: "5px 10px", fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+            {verDesemp ? <><EyeOff size={12} /> ocultar</> : <><Eye size={12} /> mostrar</>}
+          </button>
         </div>
-        {desempenho.length === 0 ? (
+        {!verDesemp ? null : desempenho.length === 0 ? (
           <div style={{ fontSize: 12, color: "#6b7099" }}>Nenhuma surebet finalizada no período.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
